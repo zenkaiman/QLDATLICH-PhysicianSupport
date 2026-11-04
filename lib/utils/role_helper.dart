@@ -60,7 +60,7 @@ class VaiTroNhanVienHelper {
     final nguon = rawValue.isNotEmpty ? rawValue : chuanHoa(maNhanVien);
     if (nguon.isEmpty) return khac;
 
-    const ds = <String>[nguon];
+    final ds = <String>[nguon];
     if (_co(ds, const ['quan_tri', 'quantri', 'admin', 'qtdn', 'quan_ly', 'quanly'])) return quanTri;
     if (_co(ds, const ['duoc_si', 'duocsi', 'duoc', 'pharmac'])) return duocSi;
     if (_co(ds, const ['ke_toan', 'ketoan', 'account'])) return keToan;
