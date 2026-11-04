@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../services/patient_notification_service.dart';
 import 'department_room_picker.dart';
 import 'queue_screen.dart';
 
@@ -322,17 +323,49 @@ class ClinicFirestoreService {
 
   /// Ghi trạng thái mới cho một lịch hẹn, đồng thời cập nhật
   /// `ngay_cap_nhat` bằng timestamp của máy chủ Firestore.
+  ///
+  /// Sau khi ghi xong, tự động đẩy một thông báo sang PHẦN BỆNH NHÂN qua
+  /// `ThongBaoHeThong` (dùng chung với Lễ tân/CSKH) để bệnh nhân biết ngay:
+  ///  - `5` Đã khám xong
+  ///  - `6` Vắng mặt
+  ///  - `7` Xin đợi (cho qua lượt)
+  ///  - `2` Được chèn/gọi lại vào hàng chờ
+  ///
+  /// Phần Bệnh nhân không cần sửa code: màn hình thông báo của bệnh nhân
+  /// đang lắng nghe realtime đúng collection này (xem
+  /// `PatientNotificationService.streamThongBaoCuaToi`).
   Future<void> updateAppointmentStatus({
     required String appointmentId,
     required String statusId,
-  }) {
-    return _firestore
+  }) async {
+    final docRef = _firestore
         .collection(appointmentsCollection)
-        .doc(appointmentId)
-        .update(<String, dynamic>{
-          'trang_thai_id': statusId,
-          'ngay_cap_nhat': FieldValue.serverTimestamp(),
-        });
+        .doc(appointmentId);
+
+    // Đọc dữ liệu lịch hẹn trước khi ghi để lấy định danh bệnh nhân
+    // (uid / mã bệnh nhân / số điện thoại) + số thứ tự cho thông báo.
+    Map<String, dynamic> duLieuLichHen = const <String, dynamic>{};
+    try {
+      final snap = await docRef.get();
+      final data = snap.data();
+      if (data != null) duLieuLichHen = data;
+    } catch (_) {
+      // Không đọc được thì vẫn ghi trạng thái như bình thường.
+    }
+
+    await docRef.update(<String, dynamic>{
+      'trang_thai_id': statusId,
+      'ngay_cap_nhat': FieldValue.serverTimestamp(),
+    });
+
+    // Thông báo cho bệnh nhân — lỗi mạng không được làm hỏng thao tác hàng chờ.
+    try {
+      await PatientNotificationService.guiThongBaoTrangThaiKham(
+        lichHenId: appointmentId,
+        trangThaiId: statusId,
+        duLieuLichHen: duLieuLichHen,
+      );
+    } catch (_) {}
   }
 
 }
