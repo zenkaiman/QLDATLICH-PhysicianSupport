@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../config/app_routes.dart';
+import '../../services/loai_thong_bao_service.dart';
 import '../../services/patient_notification_service.dart';
 
 /// Màn hình THÔNG BÁO của phần Bệnh nhân.
@@ -23,6 +24,18 @@ class _PatientNotificationsScreenState extends State<PatientNotificationsScreen>
 
   bool _chiHienChuaDoc = false;
   String? _idDangXuLy;
+
+  /// Cấu hình loại thông báo đọc từ `LoaiThongBao/benh_vien_thong_bao`
+  LoaiThongBaoCauHinh _cauHinh = LoaiThongBaoCauHinh.macDinh;
+
+  @override
+  void initState() {
+    super.initState();
+    LoaiThongBaoService.layCauHinh().then((cauHinh) {
+      if (!mounted) return;
+      setState(() => _cauHinh = cauHinh);
+    });
+  }
 
   Future<void> _xuLyKhiBam(Map<String, dynamic> item) async {
     final id = (item['id'] ?? '').toString();
@@ -81,6 +94,7 @@ class _PatientNotificationsScreenState extends State<PatientNotificationsScreen>
                     _IconThongBao(
                       loai: (item['loai'] ?? 'lich_hen').toString(),
                       trangThai: trangThai,
+                      kieu: _kieuCua(item),
                       kichThuoc: 42,
                     ),
                     const SizedBox(width: 12),
@@ -382,7 +396,11 @@ class _PatientNotificationsScreenState extends State<PatientNotificationsScreen>
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _IconThongBao(loai: loai, trangThai: trangThaiLichHen),
+              _IconThongBao(
+                loai: loai,
+                trangThai: trangThaiLichHen,
+                kieu: _kieuCua(item),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -457,6 +475,12 @@ class _PatientNotificationsScreenState extends State<PatientNotificationsScreen>
     );
   }
 
+  /// Cấu hình (icon/màu/tiêu đề) của loại thông báo lấy từ Firestore
+  LoaiThongBaoKieu? _kieuCua(Map<String, dynamic> item) {
+    final ma = (item['ma_loai_thong_bao'] ?? '').toString();
+    return _cauHinh.kieu(ma);
+  }
+
   Widget _trangThaiRong({
     required IconData icon,
     required String tieuDe,
@@ -504,10 +528,14 @@ class _IconThongBao extends StatelessWidget {
   const _IconThongBao({
     required this.loai,
     this.trangThai = '',
+    this.kieu,
     this.kichThuoc = 40,
   });
 
   final String loai;
+
+  /// Cấu hình loại thông báo trên Firestore (nếu có) — ưu tiên icon/màu này
+  final LoaiThongBaoKieu? kieu;
 
   /// Trạng thái lịch hẹn: da_duyet | tu_choi | da_kham | vang_mat | xin_doi | dang_cho
   final String trangThai;
@@ -518,6 +546,20 @@ class _IconThongBao extends StatelessWidget {
     IconData icon;
     Color mauNen;
     Color mauIcon;
+
+    // Ưu tiên cấu hình khai báo trong LoaiThongBao/benh_vien_thong_bao
+    if (kieu != null && kieu!.icon.trim().isNotEmpty) {
+      mauIcon = kieu!.mau ?? const Color(0xFF0284C7);
+      return Container(
+        width: kichThuoc,
+        height: kichThuoc,
+        decoration: BoxDecoration(
+          color: mauIcon.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(kieu!.iconData, size: kichThuoc * 0.5, color: mauIcon),
+      );
+    }
 
     switch (trangThai) {
       case 'da_duyet':

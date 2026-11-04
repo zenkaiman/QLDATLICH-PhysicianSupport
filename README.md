@@ -33,3 +33,54 @@ Thông báo gắn `vai_tro_nhan = 'benh_nhan'` kèm `nguoi_nhan_id`, `benh_nhan_
 
 > Khi chạy thật, đặt `PatientNotificationService.cheDoXemThuKhiChuaDangNhap = false`
 > để mỗi bệnh nhân chỉ thấy thông báo của chính mình.
+
+## Danh mục loại thông báo — `LoaiThongBao/benh_vien_thong_bao`
+
+Nội dung thông báo gửi sang bệnh nhân lấy từ document
+`LoaiThongBao/benh_vien_thong_bao` trên Firestore (`lib/services/loai_thong_bao_service.dart`).
+
+Mỗi thông báo ghi vào `ThongBaoHeThong` đều mang `loai_thong_bao_id = "benh_vien_thong_bao"`
+và `ma_loai_thong_bao` để tra icon/màu/nội dung.
+
+Các mã loại đang dùng:
+
+| Mã (`ma`) | Dùng khi |
+| --- | --- |
+| `kham_xong` | Nhân viên bấm “Tiếp theo” → bệnh nhân đã khám xong |
+| `xin_doi` | Bấm “Đợi / Gọi lại” → cho số qua lượt (đợi) |
+| `chen_so` | Bấm “+ Chèn” → đưa số trở lại hàng chờ |
+| `vang_mat` | “Xác nhận vắng mặt” |
+| `duyet_lich` | Duyệt đơn đặt lịch |
+| `tu_choi_lich` | Từ chối đơn đặt lịch |
+
+Document có thể khai báo trực tiếp các loại con bằng field dạng mảng/object
+(`danh_sach`, `items`, `loai`, `cac_loai`, …) hoặc bằng subcollection
+`LoaiThongBao/benh_vien_thong_bao/danh_sach/{ma_loai}`:
+
+```json
+{
+  "ma": "benh_vien_thong_bao",
+  "ten": "Bệnh viện thông báo",
+  "icon": "campaign",
+  "mau": "#0284C7",
+  "bat": true,
+  "danh_sach": [
+    {
+      "ma": "kham_xong",
+      "tieu_de": "Đã khám xong",
+      "noi_dung": "Bạn đã hoàn thành lượt khám tại {phong} ({so_thu_tu}). Chúc bạn nhiều sức khoẻ!",
+      "icon": "check_circle",
+      "mau": "#16A34A",
+      "bat": true
+    }
+  ]
+}
+```
+
+Placeholder hỗ trợ trong `tieu_de` / `noi_dung`:
+`{so_thu_tu}`, `{khoa}`, `{phong}`, `{gio}`, `{ngay}`, `{ly_do}`, `{ho_ten}`, `{ghi_chu}`.
+
+- Loại không khai báo → dùng câu mặc định trong app (không lỗi).
+- `bat: false` (hoặc `trang_thai: "tat"`) → **không gửi** loại thông báo đó.
+- Đổi cấu hình trên Firestore xong, gọi `LoaiThongBaoService.layCauHinh(lamMoi: true)`
+  (hoặc khởi động lại app) để nạp lại.
