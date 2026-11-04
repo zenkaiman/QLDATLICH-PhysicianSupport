@@ -504,14 +504,15 @@ class _QueueScreenState extends State<QueueScreen> {
         ..addAll(snapshot.patientNameByNumber);
       paused = snapshot.paused;
     } else {
-      // Mo phong lan dau: nap mac dinh tu so khoi tao de luon co the goi so va test day du chuc nang,
-      // neu Firebase co danh sach lich hen that trong ngay thi stream se tu dong cap nhat de len.
-      const defaultWindow = 5;
-      final start = widget.initialCurrent > 0 ? widget.initialCurrent : 1;
+      // Lần đầu mở phòng: KHÔNG tự sinh số thứ tự.
+      // Chỉ hiện số khi lịch hẹn thật của phòng hôm nay có `so_thu_tu`
+      // (stream lịch hẹn sẽ nạp số vào); trước đó màn hình để trống
+      // ("Chưa có bệnh nhân nào…") thay vì mặc định số 1.
+      final start = widget.initialCurrent > 0 ? widget.initialCurrent : 0;
       current = start;
-      next = start + 1;
-      waiting = List<int>.generate(defaultWindow, (index) => start + 2 + index);
-      lastIssued = start + 1 + defaultWindow;
+      next = 0;
+      waiting = <int>[];
+      lastIssued = start;
       snapshot
         ..started = true
         ..paused = false;
