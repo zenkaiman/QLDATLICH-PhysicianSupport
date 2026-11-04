@@ -478,6 +478,49 @@ class ClinicFirestoreService {
     } catch (_) {}
   }
 
+  /// Ghi số thứ tự mới của một lịch hẹn lên Firestore và báo cho bệnh
+  /// nhân biết số mới.
+  ///
+  /// Dùng khi nhân viên bấm “+ Chèn”: số vừa chèn nhận `số mốc + 1` và
+  /// các số phía sau tăng thêm 1, nên phải cập nhật `so_thu_tu` của mọi
+  /// lịch hẹn bị đổi số để app bệnh nhân và các máy khác thấy đúng.
+  Future<void> updateAppointmentSoThuTu({
+    required String appointmentId,
+    required int soThuTu,
+  }) async {
+    if (appointmentId.trim().isEmpty || soThuTu <= 0) return;
+    final docRef = _firestore
+        .collection(appointmentsCollection)
+        .doc(appointmentId);
+
+    // Đọc trước khi ghi để thông báo có đủ thông tin bệnh nhân/khoa/phòng.
+    Map<String, dynamic> duLieuLichHen = const <String, dynamic>{};
+    try {
+      final snapshot = await docRef.get();
+      final data = snapshot.data();
+      if (data != null) duLieuLichHen = data;
+    } catch (_) {
+      // Không đọc được thì vẫn ghi số mới như bình thường.
+    }
+
+    await docRef.update(<String, dynamic>{
+      'so_thu_tu': soThuTu,
+      'ngay_cap_nhat': FieldValue.serverTimestamp(),
+    });
+
+    // Báo bệnh nhân số mới — lỗi mạng không được làm hỏng thao tác hàng chờ.
+    try {
+      await ThongBaoBenhNhanService.guiThongBaoTrangThaiKham(
+        lichHenId: appointmentId,
+        trangThaiId: confirmedStatusId,
+        duLieuLichHen: <String, dynamic>{
+          ...duLieuLichHen,
+          'so_thu_tu': soThuTu,
+        },
+        ghiChu: 'Số thứ tự của bạn đã được cập nhật.',
+      );
+    } catch (_) {}
+  }
 }
 
 /// Màn hình chọn khoa/phòng lấy danh sách phòng từ Cloud Firestore theo
@@ -550,6 +593,10 @@ class _FirestoreClinicRoomPickerScreenState
     updates: _service.watchAppointmentQueue(
       hospitalId: widget.hospitalId,
       roomId: room.id,
+    ),
+    renumber: (appointmentId, soThuTu) => _service.updateAppointmentSoThuTu(
+      appointmentId: appointmentId,
+      soThuTu: soThuTu,
     ),
     reportOutcome: (appointmentId, outcome) =>
         _service.updateAppointmentStatus(

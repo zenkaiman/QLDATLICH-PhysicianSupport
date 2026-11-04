@@ -332,6 +332,7 @@ class QueueScreen extends StatefulWidget {
     this.startingNumber = 0,
     this.appointmentQueueStream,
     this.onAppointmentOutcome,
+    this.onRenumberAppointment,
   });
 
   /// Mã phiên khám – gom các lượt của cùng một buổi/ngày.
@@ -371,6 +372,13 @@ class QueueScreen extends StatefulWidget {
   /// hiện thông báo, không chặn thao tác gọi số trên màn hình.
   final Future<void> Function(String appointmentId, AppointmentOutcome outcome)?
   onAppointmentOutcome;
+
+  /// Ghi số thứ tự mới của một lịch hẹn lên Firebase khi nhân viên chèn
+  /// số: số vừa chèn nhận `số mốc + 1`, các số phía sau tăng thêm 1.
+  ///
+  /// Lỗi của callback chỉ hiện thông báo, không chặn thao tác hàng chờ.
+  final Future<void> Function(String appointmentId, int soThuTu)?
+  onRenumberAppointment;
 
   @override
   State<QueueScreen> createState() => _QueueScreenState();
@@ -424,6 +432,11 @@ class _QueueScreenState extends State<QueueScreen> {
   /// Các số đã xác nhận vắng mặt trên máy này; không nạp lại từ luồng
   /// lịch hẹn trong lúc Firebase chưa kịp đổi trạng thái.
   final Set<int> _absentAppointmentNumbers = <int>{};
+
+  /// Ánh xạ tạm mã lịch hẹn → số thứ tự MỚI vừa ghi sau khi chèn số.
+  /// Luồng Firebase còn trả số cũ trong vài giây; ánh xạ này giữ nguyên
+  /// số mới trên màn hình cho tới khi document trả về đúng số đó.
+  final Map<String, int> _pendingRenumberByAppointmentId = <String, int>{};
 
   /// Các số đã xin đợi vừa được chèn lại trên máy này và đang chờ
   /// Firebase đưa lịch hẹn về trạng thái đã xác nhận (`2`). Chúng được
@@ -578,9 +591,63 @@ class _QueueScreenState extends State<QueueScreen> {
     store.refresh();
   }
 
+  /// Áp các số thứ tự MỚI vừa ghi sau khi chèn lên một đợt cập nhật từ
+  /// Firebase, để màn hình không quay về số cũ trong vài giây đầu.
+  AppointmentQueueUpdate _applyPendingRenumber(
+    AppointmentQueueUpdate update,
+  ) {
+    if (_pendingRenumberByAppointmentId.isEmpty) return update;
+    final numbers = <int>[];
+    final appointmentIdByNumber = <int, String>{};
+    final patientNameByNumber = <int, String>{};
+    final daDung = <int>{};
+    final dangCho = <String>{};
+    for (final number in update.numbers) {
+      final appointmentId = update.appointmentIdByNumber[number];
+      var soHienThi = number;
+      if (appointmentId != null) {
+        final soMoi = _pendingRenumberByAppointmentId[appointmentId];
+        if (soMoi != null) {
+          dangCho.add(appointmentId);
+          if (soMoi == number) {
+            // Firebase đã ghi xong số mới: không cần giữ ánh xạ nữa.
+            _pendingRenumberByAppointmentId.remove(appointmentId);
+          } else {
+            soHienThi = soMoi;
+          }
+        }
+      }
+      if (!daDung.add(soHienThi)) continue;
+      numbers.add(soHienThi);
+      if (appointmentId != null) {
+        appointmentIdByNumber[soHienThi] = appointmentId;
+      }
+      final ten = update.patientNameByNumber[number];
+      if (ten != null && ten.trim().isNotEmpty) {
+        patientNameByNumber[soHienThi] = ten;
+      }
+    }
+    // Lịch hẹn đã rời danh sách đủ điều kiện (khám xong / vắng / xin đợi)
+    // thì không cần giữ số mới nữa.
+    _pendingRenumberByAppointmentId.removeWhere(
+      (appointmentId, _) =>
+          !dangCho.contains(appointmentId) &&
+          !update.appointmentIdByNumber.containsValue(appointmentId),
+    );
+    numbers.sort();
+    return (
+      numbers: numbers,
+      appointmentIdByNumber: appointmentIdByNumber,
+      patientNameByNumber: patientNameByNumber,
+    );
+  }
+
   /// Áp một đợt cập nhật từ luồng lịch hẹn vào trạng thái hiện tại.
   void _applyAppointmentUpdate(AppointmentQueueUpdate update) {
     if (!mounted) return;
+    // Giữ đúng số mới vừa ghi sau khi chèn, kể cả khi Firebase chưa kịp
+    // cập nhật `so_thu_tu` trong vài giây đầu.
+    update = _applyPendingRenumber(update);
     final newlyRequeuedNumbers = <int>[];
     setState(() {
       final wasEmpty = current <= 0;
@@ -1378,6 +1445,127 @@ class _QueueScreenState extends State<QueueScreen> {
     });
     for (final number in immediateNumbersToReport) {
       _reportAppointmentOutcome(number, AppointmentOutcome.requeued);
+    }
+    // Đánh số lại sau khi chèn: số vừa chèn nhận số mốc + 1, các số phía
+    // sau tăng thêm 1 và được ghi lên Firebase.
+    _danhSoLaiSauKhiChen();
+  }
+
+  /// Đánh số lại hàng chờ sau khi chèn số và ghi số mới lên Firebase.
+  ///
+  /// Số đang khám ([current]) và các số đã khám/đã cho qua giữ nguyên.
+  /// Các số còn chờ được đánh liên tiếp, bắt đầu từ `current + 1`, theo
+  /// đúng thứ tự gọi — nên số vừa chèn ngay sau số mốc nhận
+  /// `số mốc + 1` và mọi số phía sau tăng thêm 1.
+  void _danhSoLaiSauKhiChen() {
+    // Thứ tự gọi của các số CHƯA khám (mỗi số chỉ tính một lần).
+    final order = <int>[];
+    for (final so in <int>[if (next > 0) next, ...waiting]) {
+      if (so > 0 && !order.contains(so)) order.add(so);
+    }
+    if (order.isEmpty) return;
+
+    final renumber = <int, int>{};
+    var soMoi = current > 0 ? current : 0;
+    for (final soCu in order) {
+      soMoi += 1;
+      if (soMoi != soCu) renumber[soCu] = soMoi;
+    }
+    if (renumber.isEmpty) return;
+
+    // Chụp mã lịch hẹn TRƯỚC khi đổi khoá các ánh xạ theo số.
+    final canGhi = <(String, int)>[
+      for (final entry in renumber.entries)
+        if (_appointmentIdByNumber[entry.key] case final appointmentId?)
+          (appointmentId, entry.value),
+    ];
+
+    int doi(int so) => renumber[so] ?? so;
+
+    setState(() {
+      next = doi(next);
+      waiting = <int>[for (final so in waiting) doi(so)];
+      for (var i = 0; i < passed.length; i++) {
+        final entry = passed[i];
+        final moi = renumber[entry.number];
+        if (moi != null) {
+          passed[i] = (number: moi, deferred: entry.deferred);
+        }
+      }
+      for (var i = 0; i < _deferredHistory.length; i++) {
+        _deferredHistory[i] = doi(_deferredHistory[i]);
+      }
+      for (var i = 0; i < _eligibleAppointmentNumbers.length; i++) {
+        _eligibleAppointmentNumbers[i] = doi(_eligibleAppointmentNumbers[i]);
+      }
+      for (var i = 0; i < _scheduledFutureInserts.length; i++) {
+        final insert = _scheduledFutureInserts[i];
+        _scheduledFutureInserts[i] = (
+          number: doi(insert.number),
+          afterNumber:
+              insert.afterNumber == null ? null : doi(insert.afterNumber!),
+        );
+      }
+      final soTheoId = <int, String>{
+        for (final entry in _appointmentIdByNumber.entries)
+          doi(entry.key): entry.value,
+      };
+      _appointmentIdByNumber
+        ..clear()
+        ..addAll(soTheoId);
+      final tenTheoSo = <int, String>{
+        for (final entry in _patientNameByNumber.entries)
+          doi(entry.key): entry.value,
+      };
+      _patientNameByNumber
+        ..clear()
+        ..addAll(tenTheoSo);
+      final vangMat = <int>{for (final so in _absentAppointmentNumbers) doi(so)};
+      _absentAppointmentNumbers
+        ..clear()
+        ..addAll(vangMat);
+      final chenLai = <int>{
+        for (final so in _requeuedAppointmentNumbers) doi(so),
+      };
+      _requeuedAppointmentNumbers
+        ..clear()
+        ..addAll(chenLai);
+      if (selected != null) selected = doi(selected!);
+      if (soMoi > lastIssued) lastIssued = soMoi;
+      _syncRoomState();
+    });
+
+    final thayDoi = renumber.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final moTa = <String>[
+      for (final entry in thayDoi) 'số ${entry.key} → ${entry.value}',
+    ].join(', ');
+
+    final ghi = widget.onRenumberAppointment;
+    if (ghi == null) {
+      notify('Đã đánh số lại hàng chờ: $moTa.');
+      return;
+    }
+
+    for (final (appointmentId, soTheoLich) in canGhi) {
+      _pendingRenumberByAppointmentId[appointmentId] = soTheoLich;
+    }
+    notify('Đã đánh số lại hàng chờ và cập nhật Firebase: $moTa.');
+
+    var loi = 0;
+    for (final (appointmentId, soTheoLich) in canGhi) {
+      unawaited(
+        ghi(appointmentId, soTheoLich).catchError((Object _) {
+          loi += 1;
+          _pendingRenumberByAppointmentId.remove(appointmentId);
+          if (mounted && loi == 1) {
+            notify(
+              'Chưa cập nhật được số thứ tự mới lên Firebase. '
+              'Kiểm tra kết nối rồi thử lại.',
+            );
+          }
+        }),
+      );
     }
   }
 
