@@ -1160,6 +1160,10 @@ typedef ClinicAppointmentFeed = ({
   Stream<AppointmentQueueUpdate> updates,
   Future<void> Function(String appointmentId, AppointmentOutcome outcome)
   reportOutcome,
+
+  /// Ghi số thứ tự mới của một lịch hẹn khi nhân viên chèn số: số vừa
+  /// chèn nhận `số mốc + 1`, các số phía sau tăng thêm 1.
+  Future<void> Function(String appointmentId, int soThuTu) renumber,
 });
 
 /// Màn hình chọn khoa/phòng đã kết nối với QueueScreen trong queue_screen.dart.
@@ -1262,6 +1266,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
                 hospitalName: hospitalName,
                 appointmentQueueStream: appointmentFeed?.updates,
                 onAppointmentOutcome: appointmentFeed?.reportOutcome,
+                onRenumberAppointment: appointmentFeed?.renumber,
               ),
             ),
           );
