@@ -7,6 +7,7 @@ import '../auth/login_screen.dart';
 import 'letan_capnhat_profile_screen_c1.dart';
 import 'letan_doimatkhau_screen_c1.dart';
 import 'letan_quenmatkhau_screen_c1.dart';
+import '../../utils/role_helper.dart';
 
 /// Màn hình Profile / Hồ sơ chuẩn hóa thống nhất cho Chăm Sóc Khách Hàng (CSKH)
 /// Đồng bộ chung giao diện, tái sử dụng toàn bộ hàm Firestore, Đổi MK, Quên MK, Đổi Gmail
@@ -42,7 +43,13 @@ class _CskhProfileTabC1State extends State<CskhProfileTabC1> {
             maNhanVien: (data['ma_nhan_vien'] ?? data['ma_tai_khoan'] ?? _thongTin.maNhanVien).toString(),
             email: (data['email'] ?? _thongTin.email).toString(),
             hoTen: (data['ho_ten'] ?? _thongTin.hoTen).toString(),
-            chucVu: (data['chuc_vu'] ?? 'Chuyên viên Chăm sóc khách hàng').toString(),
+            chucVu: (data['chuc_vu_hien_thi'] ??
+                    data['chuc_vu'] ??
+                    VaiTroNhanVienHelper.nhan(
+                      (data['vai_tro'] ?? data['role'] ?? 'cskh').toString(),
+                      maNhanVien: (data['ma_nhan_vien'] ?? _thongTin.maNhanVien).toString(),
+                    ))
+                .toString(),
             khoa: (data['khoa'] ?? 'Bộ Phận CSKH & Tiếp Nhận').toString(),
             tenBenhVien: (data['ten_benh_vien'] ?? data['tenBenhVien'] ?? _thongTin.tenBenhVien).toString(),
             benhVienId: (data['benh_vien_id'] ?? data['ma_benh_vien'] ?? _thongTin.benhVienId).toString(),
