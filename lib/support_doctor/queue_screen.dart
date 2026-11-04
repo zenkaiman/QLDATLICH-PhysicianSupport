@@ -1202,6 +1202,10 @@ class _QueueScreenState extends State<QueueScreen> {
       // Số được gọi lại đang khám -> không còn thuộc "ĐÃ KHÁM" hay
       // "SỐ ĐÃ CHO QUA" nữa.
       passed.removeWhere((entry) => entry.number == picked);
+      // Số được gọi lại coi như đang chờ khám trở lại: không còn là số
+      // vắng mặt hay số đang chờ Firebase xác nhận chèn lại.
+      _absentAppointmentNumbers.remove(picked);
+      _requeuedAppointmentNumbers.add(picked);
       current = picked;
       if (previousCurrent > 0) {
         next = previousCurrent;
@@ -1225,6 +1229,9 @@ class _QueueScreenState extends State<QueueScreen> {
       if (selected != null && !waiting.contains(selected)) selected = null;
       _syncRoomState();
     });
+    // Gọi lại = bệnh nhân quay lại hàng chờ: ghi trạng thái `2`
+    // (Đã xác nhận) lên LichHen để Firebase và app bệnh nhân thấy đúng.
+    _reportAppointmentOutcome(picked, AppointmentOutcome.requeued);
     notify('Mời bệnh nhân số $picked đến ${widget.roomName.toLowerCase()}.');
   }
 
