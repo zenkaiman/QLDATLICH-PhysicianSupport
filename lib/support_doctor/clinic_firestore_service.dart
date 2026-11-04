@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../services/patient_notification_service.dart';
 import 'department_room_picker.dart';
 import 'queue_screen.dart';
+import 'thong_bao_benh_nhan.dart';
 
 /// Đọc danh sách khoa/phòng từ Cloud Firestore theo thời gian thực.
 ///
@@ -331,9 +331,9 @@ class ClinicFirestoreService {
   ///  - `7` Xin đợi (cho qua lượt)
   ///  - `2` Được chèn/gọi lại vào hàng chờ
   ///
-  /// Phần Bệnh nhân không cần sửa code: màn hình thông báo của bệnh nhân
-  /// đang lắng nghe realtime đúng collection này (xem
-  /// `PatientNotificationService.streamThongBaoCuaToi`).
+  /// Phần Bệnh nhân không cần sửa code: màn hình thông báo sẵn có của bệnh
+  /// nhân đang lắng nghe realtime đúng collection này (xem
+  /// `ThongBaoBenhNhanService`).
   Future<void> updateAppointmentStatus({
     required String appointmentId,
     required String statusId,
@@ -360,7 +360,7 @@ class ClinicFirestoreService {
 
     // Thông báo cho bệnh nhân — lỗi mạng không được làm hỏng thao tác hàng chờ.
     try {
-      await PatientNotificationService.guiThongBaoTrangThaiKham(
+      await ThongBaoBenhNhanService.guiThongBaoTrangThaiKham(
         lichHenId: appointmentId,
         trangThaiId: statusId,
         duLieuLichHen: duLieuLichHen,

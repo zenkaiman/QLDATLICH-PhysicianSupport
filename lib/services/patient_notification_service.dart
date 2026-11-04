@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 import '../config/app_session.dart';
-import 'loai_thong_bao_service.dart';
 
 /// Cầu nối THÔNG BÁO giữa khu vực Lễ tân/CSKH và PHẦN BỆNH NHÂN.
 ///
@@ -202,7 +201,6 @@ class PatientNotificationService {
     String? benhVienId,
     String? lichHenId,
     String? tenKhoa,
-    String? maLoaiThongBao,
     Map<String, dynamic> duLieuThem = const {},
   }) async {
     final data = <String, dynamic>{
@@ -210,10 +208,6 @@ class PatientNotificationService {
       'tieu_de': tieuDe,
       'noi_dung': noiDung,
       'loai': loai,
-      // Tham chiếu tới danh mục loại thông báo trên Firestore
-      // (LoaiThongBao/benh_vien_thong_bao) — dùng để tra icon/màu/cấu hình.
-      'loai_thong_bao_id': LoaiThongBaoService.docBenhVienThongBao,
-      if ((maLoaiThongBao ?? '').trim().isNotEmpty) 'ma_loai_thong_bao': maLoaiThongBao!.trim(),
       'vai_tro_nhan': vaiTroBenhNhan,
       'nguoi_nhan_id': (nguoiNhanId ?? '').trim(),
       'benh_nhan_id': (benhNhanId ?? '').trim(),
@@ -239,10 +233,7 @@ class PatientNotificationService {
   }
 
   /// Thông báo kết quả duyệt / từ chối lịch hẹn cho bệnh nhân.
-  ///
   /// Được gọi tự động từ `FirebaseServiceC1.capNhatTrangThaiLichHen`.
-  /// Nội dung lấy từ `LoaiThongBao/benh_vien_thong_bao` (mã `duyet_lich` /
-  /// `tu_choi_lich`) nếu có khai báo, ngược lại dùng câu mặc định.
   static Future<void> guiThongBaoKetQuaDuyetLichHen({
     required String lichHenId,
     required bool daDuyet,
@@ -265,52 +256,27 @@ class PatientNotificationService {
     final gio = (gioKham ?? '').trim();
     final thoiGianKham = [ngay, gio].where((e) => e.isNotEmpty).join(' • ');
     final thoiGianCau = thoiGianKham.isEmpty ? '' : ' vào $thoiGianKham';
-    final lyDo = (lyDoTuChoi ?? '').trim();
 
-    final maLoai = daDuyet
-        ? LoaiThongBaoService.maDuyetLich
-        : LoaiThongBaoService.maTuChoiLich;
-
-    final String tieuDeMacDinh;
-    final String noiDungMacDinh;
+    final String tieuDe;
+    final String noiDung;
 
     if (daDuyet) {
-      tieuDeMacDinh = 'Lịch hẹn đã được xác nhận';
+      tieuDe = 'Lịch hẹn đã được xác nhận';
       final sttCau = (soThuTu != null && soThuTu > 0) ? ' Số thứ tự của bạn là $soThuTu.' : '';
-      noiDungMacDinh = 'Bệnh viện đã xác nhận $moTaKhoa$thoiGianCau.$sttCau '
+      noiDung = 'Bệnh viện đã xác nhận $moTaKhoa$thoiGianCau.$sttCau '
           'Vui lòng có mặt trước giờ khám 15 phút và xuất trình mã QR khi tới quầy tiếp đón.';
     } else {
-      tieuDeMacDinh = 'Lịch hẹn chưa được duyệt';
+      tieuDe = 'Lịch hẹn chưa được duyệt';
+      final lyDo = (lyDoTuChoi ?? '').trim();
       final lyDoCau = lyDo.isEmpty ? '' : ' Lý do: $lyDo.';
-      noiDungMacDinh = 'Rất tiếc, $moTaKhoa$thoiGianCau chưa được duyệt.$lyDoCau '
+      noiDung = 'Rất tiếc, $moTaKhoa$thoiGianCau chưa được duyệt.$lyDoCau '
           'Bạn có thể đặt lịch khám ở khung giờ khác hoặc liên hệ CSKH để được hỗ trợ.';
     }
-
-    // Cấu hình loại thông báo lấy từ Firestore (LoaiThongBao/benh_vien_thong_bao)
-    final cauHinh = await LoaiThongBaoService.layCauHinh();
-    if (!cauHinh.duocPhep(maLoai)) return;
-
-    final kieu = cauHinh.kieu(maLoai);
-    final bien = <String, String>{
-      'so_thu_tu': (soThuTu != null && soThuTu > 0) ? '$soThuTu' : '',
-      'khoa': khoa,
-      'phong': '',
-      'gio': gio,
-      'ngay': ngay,
-      'ly_do': lyDo,
-      'ho_ten': (hoTen ?? '').trim(),
-    };
-
-    final tieuDeMau = kieu?.tieuDe ?? '';
-    final noiDungMau = kieu?.noiDungMau ?? '';
-    final tieuDe = tieuDeMau.isNotEmpty ? kieu!.apDungMau(tieuDeMau, bien) : tieuDeMacDinh;
-    final noiDung = noiDungMau.isNotEmpty ? kieu!.apDungMau(noiDungMau, bien) : noiDungMacDinh;
 
     await guiThongBaoChoBenhNhan(
       tieuDe: tieuDe,
       noiDung: noiDung,
       loai: 'lich_hen',
-      maLoaiThongBao: maLoai,
       nguoiNhanId: nguoiNhanId,
       benhNhanId: benhNhanId,
       soDienThoai: soDienThoai,
@@ -321,7 +287,7 @@ class PatientNotificationService {
       duLieuThem: {
         'trang_thai_lich_hen': daDuyet ? 'da_duyet' : 'tu_choi',
         if (soThuTu != null) 'so_thu_tu': soThuTu,
-        if (lyDo.isNotEmpty) 'ly_do_tu_choi': lyDo,
+        if ((lyDoTuChoi ?? '').trim().isNotEmpty) 'ly_do_tu_choi': lyDoTuChoi!.trim(),
         if ((hoTen ?? '').trim().isNotEmpty) 'ho_ten': hoTen!.trim(),
         if (gio.isNotEmpty) 'gio_kham': gio,
         if (ngay.isNotEmpty) 'ngay_kham': ngay,
@@ -332,16 +298,15 @@ class PatientNotificationService {
   /// Thông báo trạng thái khám theo thao tác của nhân viên trên hàng chờ
   /// (màn hình "Tiếp theo", "Đợi / Gọi lại", "+ Chèn số", "Vắng mặt").
   ///
-  /// Nội dung lấy từ danh mục `LoaiThongBao/benh_vien_thong_bao` trên Firestore
-  /// (xem [LoaiThongBaoService]): nếu loại tương ứng được khai báo `tieu_de` /
-  /// `noi_dung` thì dùng đúng câu chữ đó, ngược lại dùng câu mặc định trong app.
-  /// Loại bị tắt (`bat = false`) sẽ không gửi.
+  /// Nhờ gom về đúng một hàm + đúng collection `ThongBaoHeThong`, phần Bệnh
+  /// nhân KHÔNG cần sửa gì thêm khi nhân viên thao tác: chỉ cần
+  /// [streamThongBaoCuaToi] là mọi thông báo mới tự hiện ra.
   ///
   /// Bảng mã trạng thái dùng trong project:
-  /// - `'2'` Đã xác nhận  → số được chèn/gọi lại vào hàng chờ  (loại `chen_so`)
-  /// - `'5'` Hoàn thành   → bệnh nhân đã khám xong             (loại `kham_xong`)
-  /// - `'6'` Vắng mặt     → bệnh nhân xin đợi nhưng không quay lại (`vang_mat`)
-  /// - `'7'` Xin đợi      → số được cho qua lượt (đợi)         (loại `xin_doi`)
+  /// - `'2'` Đã xác nhận  → số được chèn/gọi lại vào hàng chờ
+  /// - `'5'` Hoàn thành   → bệnh nhân đã khám xong
+  /// - `'6'` Vắng mặt     → bệnh nhân xin đợi nhưng không quay lại
+  /// - `'7'` Xin đợi      → số được cho qua lượt (đợi)
   static Future<void> guiThongBaoTrangThaiKham({
     required String lichHenId,
     required String trangThaiId,
@@ -356,42 +321,36 @@ class PatientNotificationService {
 
     final phong = (dinhDanh['phongKham'] ?? '').trim();
     final khoa = (dinhDanh['tenKhoa'] ?? '').trim();
-    final hoTen = (dinhDanh['hoTen'] ?? '').trim();
     final noiKham = phong.isNotEmpty ? phong : (khoa.isNotEmpty ? khoa : 'phòng khám');
 
     final ghiChuCau = (ghiChu ?? '').trim().isEmpty ? '' : ' ${ghiChu!.trim()}';
 
-    late String tieuDeMacDinh;
-    late String noiDungMacDinh;
-    late String maLoai;
+    late String tieuDe;
+    late String noiDung;
     String? trangThaiLichHen;
 
     switch (maTrangThai) {
       case '5':
-        maLoai = LoaiThongBaoService.maKhamXong;
-        tieuDeMacDinh = 'Đã khám xong';
-        noiDungMacDinh = 'Bạn đã hoàn thành lượt khám tại $noiKham ($soCau). '
+        tieuDe = 'Đã khám xong';
+        noiDung = 'Bạn đã hoàn thành lượt khám tại $noiKham ($soCau). '
             'Cảm ơn bạn đã sử dụng dịch vụ, chúc bạn nhiều sức khoẻ!$ghiChuCau';
         trangThaiLichHen = 'da_kham';
         break;
       case '6':
-        maLoai = LoaiThongBaoService.maVangMat;
-        tieuDeMacDinh = 'Ghi nhận vắng mặt';
-        noiDungMacDinh = 'Hệ thống ghi nhận $soCau vắng mặt vì chưa quay lại sau khi xin đợi. '
+        tieuDe = 'Ghi nhận vắng mặt';
+        noiDung = 'Hệ thống ghi nhận $soCau vắng mặt vì chưa quay lại sau khi xin đợi. '
             'Nếu cần hỗ trợ, vui lòng liên hệ quầy tiếp đón.$ghiChuCau';
         trangThaiLichHen = 'vang_mat';
         break;
       case '7':
-        maLoai = LoaiThongBaoService.maXinDoi;
-        tieuDeMacDinh = 'Đã ghi nhận xin đợi';
-        noiDungMacDinh = 'Bạn đã xin đợi tại $noiKham ($soCau). Khi quay lại, vui lòng báo '
+        tieuDe = 'Đã ghi nhận xin đợi';
+        noiDung = 'Bạn đã xin đợi tại $noiKham ($soCau). Khi quay lại, vui lòng báo '
             'nhân viên để được chèn lại $soCau vào hàng chờ.$ghiChuCau';
         trangThaiLichHen = 'xin_doi';
         break;
       case '2':
-        maLoai = LoaiThongBaoService.maChenSo;
-        tieuDeMacDinh = 'Đã chèn lại vào hàng chờ';
-        noiDungMacDinh = '$soCau của bạn đã được đưa trở lại hàng chờ tại $noiKham. '
+        tieuDe = 'Đã chèn lại vào hàng chờ';
+        noiDung = '$soCau của bạn đã được đưa trở lại hàng chờ tại $noiKham. '
             'Vui lòng theo dõi màn hình để vào phòng khám khi được gọi tên.$ghiChuCau';
         trangThaiLichHen = 'dang_cho';
         break;
@@ -399,29 +358,10 @@ class PatientNotificationService {
         return;
     }
 
-    // Cấu hình loại thông báo lấy từ Firestore (LoaiThongBao/benh_vien_thong_bao)
-    final cauHinh = await LoaiThongBaoService.layCauHinh();
-    if (!cauHinh.duocPhep(maLoai)) return;
-
-    final kieu = cauHinh.kieu(maLoai);
-    final bien = <String, String>{
-      'so_thu_tu': (soThuTu != null && soThuTu > 0) ? '$soThuTu' : '',
-      'khoa': khoa,
-      'phong': phong,
-      'ho_ten': hoTen,
-      'ghi_chu': (ghiChu ?? '').trim(),
-    };
-
-    final tieuDeMau = kieu?.tieuDe ?? '';
-    final noiDungMau = kieu?.noiDungMau ?? '';
-    final tieuDe = tieuDeMau.isNotEmpty ? kieu!.apDungMau(tieuDeMau, bien) : tieuDeMacDinh;
-    final noiDung = noiDungMau.isNotEmpty ? kieu!.apDungMau(noiDungMau, bien) : noiDungMacDinh;
-
     await guiThongBaoChoBenhNhan(
       tieuDe: tieuDe,
       noiDung: noiDung,
       loai: 'hang_cho',
-      maLoaiThongBao: maLoai,
       nguoiNhanId: dinhDanh['nguoiNhanId'],
       benhNhanId: dinhDanh['benhNhanId'],
       soDienThoai: dinhDanh['soDienThoai'],
