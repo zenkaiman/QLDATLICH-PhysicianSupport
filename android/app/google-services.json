@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "494400810225",
+    "project_id": "datlichkham-37558",
+    "storage_bucket": "datlichkham-37558.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:494400810225:android:32b7927e429c827859cd50",
+        "android_client_info": {
+          "package_name": "com.example.qldatlich"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARstkWBOTS_13VXp1gpA-ha1lFB3Ecwuo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
