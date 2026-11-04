@@ -17,6 +17,7 @@ import '../screens/patient/book_appointment_screen.dart';
 import '../screens/patient/medical_history_screen.dart';
 import '../screens/patient/my_appointments_screen.dart';
 import '../screens/patient/patient_home_screen.dart';
+import '../screens/patient/patient_notifications_screen.dart';
 import '../screens/receptionist/appointment_list_screen.dart';
 import '../screens/receptionist/check_in_screen.dart';
 import '../screens/receptionist/receptionist_home_screen.dart';
@@ -30,6 +31,7 @@ class AppRoutes {
   static const String bookAppointment = '/book-appointment';
   static const String myAppointments = '/my-appointments';
   static const String medicalHistory = '/medical-history';
+  static const String patientNotifications = '/patient-notifications';
 
   static const String receptionistHome = '/receptionist-home';
   static const String checkIn = '/check-in';
@@ -57,6 +59,7 @@ class AppRoutes {
         bookAppointment: (_) => const BookAppointmentScreen(),
         myAppointments: (_) => const MyAppointmentsScreen(),
         medicalHistory: (_) => const MedicalHistoryScreen(),
+        patientNotifications: (_) => const PatientNotificationsScreen(),
         receptionistHome: (_) => const ReceptionistHomeScreen(),
         checkIn: (_) => const CheckInScreen(),
         appointmentList: (_) => const AppointmentListScreen(),

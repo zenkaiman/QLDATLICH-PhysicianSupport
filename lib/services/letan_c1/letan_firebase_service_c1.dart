@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
 import '../../models/letan_c1/letan_qr_model_c1.dart';
+import '../patient_notification_service.dart';
 
 Map<String, String> _inMemorySession = {};
 
@@ -836,6 +837,7 @@ class FirebaseServiceC1 {
     String? phongKhamId,
     String? caId,
     DateTime? ngayChon,
+    bool guiThongBaoBenhNhan = true,
   }) async {
     // 1. Kiểm tra đơn hiện tại trên Firestore xem đã duyệt chưa
     DocumentSnapshot<Map<String, dynamic>>? existingSnap;
@@ -843,12 +845,16 @@ class FirebaseServiceC1 {
     final topSnap = await topDocRef.get();
     if (topSnap.exists) {
       existingSnap = topSnap;
-    } else if (docPath != null && docPath.isNotEmpty) {
-      final docSnap = await _firestore.doc(docPath).get();
-      if (docSnap.exists) existingSnap = docSnap;
     } else {
-      final q = await _firestore.collectionGroup('lich_hen').where('id', isEqualTo: appointmentId).limit(1).get();
-      if (q.docs.isNotEmpty) existingSnap = q.docs.first;
+      if (docPath != null && docPath.isNotEmpty) {
+        final docSnap = await _firestore.doc(docPath).get();
+        if (docSnap.exists) existingSnap = docSnap;
+      }
+      // Không thấy theo docPath (hoặc không có docPath) thì tìm trong collectionGroup
+      if (existingSnap == null) {
+        final q = await _firestore.collectionGroup('lich_hen').where('id', isEqualTo: appointmentId).limit(1).get();
+        if (q.docs.isNotEmpty) existingSnap = q.docs.first;
+      }
     }
 
     final existingData = existingSnap?.data() ?? {};
@@ -914,23 +920,45 @@ class FirebaseServiceC1 {
       }
     }
 
-    // 1. Cập nhật trực tiếp nếu là doc trong collection 'LichHen' cấp 1
+    // Xác định document lịch hẹn thực tế cần cập nhật
+    // (collection LichHen cấp 1 → docPath → collectionGroup 'lich_hen').
+    DocumentReference<Map<String, dynamic>>? targetRef;
     if (topSnap.exists) {
-      await topDocRef.update(updateData);
-      return capNhatStt;
+      targetRef = topDocRef;
+    } else if (existingSnap != null) {
+      targetRef = existingSnap.reference;
     }
 
-    // 2. Cập nhật theo docPath nếu có
-    if (docPath != null && docPath.isNotEmpty) {
-      await _firestore.doc(docPath).update(updateData);
-      return capNhatStt;
-    }
+    if (targetRef == null) return capNhatStt;
 
-    // 3. Tìm trong collectionGroup
-    final q = await _firestore.collectionGroup('lich_hen').where('id', isEqualTo: appointmentId).limit(1).get();
-    if (q.docs.isNotEmpty) {
-      await q.docs.first.reference.update(updateData);
-      return capNhatStt;
+    await targetRef.update(updateData);
+
+    // Đẩy kết quả duyệt / từ chối sang PHẦN BỆNH NHÂN qua ThongBaoHeThong.
+    // Bệnh nhân đang lắng nghe realtime nên không cần sửa code bên đó.
+    if (guiThongBaoBenhNhan && (trangThaiMoi == 'da_duyet' || trangThaiMoi == 'tu_choi')) {
+      try {
+        final dinhDanh = PatientNotificationService.dinhDanhTuLichHen(existingData);
+        await PatientNotificationService.guiThongBaoKetQuaDuyetLichHen(
+          lichHenId: appointmentId,
+          daDuyet: trangThaiMoi == 'da_duyet',
+          hoTen: dinhDanh['hoTen'],
+          tenKhoa: (existingData['ten_khoa'] ?? existingData['khoa'] ?? dinhDanh['tenKhoa']).toString(),
+          gioKham: (existingData['gio_du_kien'] ?? existingData['gio_kham'] ?? existingData['ca_id'] ?? '').toString(),
+          ngayKham: existingData['ngay_hien_thi'] ??
+              existingData['ngay_hen'] ??
+              existingData['ngay_kham'] ??
+              existingData['ngay_dat'],
+          soThuTu: trangThaiMoi == 'da_duyet' ? capNhatStt : null,
+          lyDoTuChoi: lyDoTuChoi,
+          nguoiNhanId: dinhDanh['nguoiNhanId'],
+          benhNhanId: dinhDanh['benhNhanId'],
+          soDienThoai: dinhDanh['soDienThoai'],
+          email: dinhDanh['email'],
+          benhVienId: (existingData['benh_vien_id'] ?? benhVienId ?? '').toString(),
+        );
+      } catch (_) {
+        // Không để lỗi thông báo làm hỏng thao tác duyệt đơn
+      }
     }
 
     return capNhatStt;
@@ -1016,7 +1044,9 @@ class FirebaseServiceC1 {
     return _firestore
         .collection('ThongBaoHeThong')
         .orderBy('thoi_gian', descending: true)
-        .limit(30)
+        // Collection dùng chung với phần Bệnh nhân nên nới hạn mức để không bị
+        // thông báo của bệnh nhân đẩy mất thông báo nội bộ của Lễ tân/CSKH.
+        .limit(60)
         .snapshots()
         .map((snap) {
       if (snap.docs.isEmpty) return [];
@@ -1024,6 +1054,10 @@ class FirebaseServiceC1 {
           .map((doc) => {'id': doc.id, ...doc.data()})
           .where((item) {
             final docBv = (item['benh_vien_id'] ?? '').toString();
+            // Thông báo gắn riêng cho bệnh nhân không hiển thị ở khu vực Lễ tân/CSKH
+            // (bệnh nhân đọc ở màn hình Thông báo của phần Bệnh nhân).
+            final vaiTroNhan = (item['vai_tro_nhan'] ?? '').toString().trim().toLowerCase();
+            if (vaiTroNhan == 'benh_nhan') return false;
             // Nếu thông báo có gắn benh_vien_id thì chỉ lấy của bệnh viện này, nếu không gắn thì hiển thị chung
             return docBv.isEmpty || docBv == bvid;
           })
