@@ -1201,6 +1201,26 @@ class FirebaseServiceC1 {
   // XÁC THỰC VÀ QUẢN LÝ TÀI KHOẢN NHÂN VIÊN C1
   // ==========================================
 
+  /// Suy ra mã bệnh viện từ mã nhân viên.
+  /// Ví dụ: BV508_BS_DL_02 → BV508, bv508_lt_01 → BV508
+  static String benhVienIdTuMaNhanVien(String? maNhanVien) {
+    final ma = (maNhanVien ?? '').trim();
+    if (ma.isEmpty) return '';
+    final match = RegExp(r'^([A-Za-z]{2,4}\d{1,6})').firstMatch(ma);
+    return match?.group(1)?.toUpperCase() ?? '';
+  }
+
+  /// Suy ra mã bệnh viện từ đường dẫn document: NhanVien/{bvId}/danh_sach/{ma}
+  static String benhVienIdTuDuongDan(String? docPath) {
+    final path = (docPath ?? '').trim();
+    if (path.isEmpty) return '';
+    final parts = path.split('/');
+    if (parts.length >= 4 && parts[0] == 'NhanVien' && parts[2] == 'danh_sach') {
+      return parts[1];
+    }
+    return '';
+  }
+
   /// Tra cứu Document nhân viên trên Firestore qua Email, Mã nhân viên hoặc UID
   /// Hỗ trợ đa tầng: Cấp 1 'NhanVien', subcollection 'danh_sach', 'BenhVien/{bvid}/NhanVien'
   static Future<DocumentSnapshot<Map<String, dynamic>>?> timKiemDocNhanVien({
@@ -1255,6 +1275,31 @@ class FirebaseServiceC1 {
         }
       }
 
+      // 1.3b Quét ĐỘNG mọi bệnh viện đang có trong 'NhanVien' (hỗ trợ BV508…)
+      try {
+        final dsBenhVien = await _firestore.collection('NhanVien').limit(50).get();
+        for (final bv in dsBenhVien.docs) {
+          try {
+            final qSubDong = await bv.reference
+                .collection('danh_sach')
+                .where('email', isEqualTo: cleanEmail)
+                .limit(1)
+                .get();
+            if (qSubDong.docs.isNotEmpty) return qSubDong.docs.first;
+          } catch (_) {}
+          if (cleanEmailLower != null && cleanEmailLower != cleanEmail) {
+            try {
+              final qSubDongLower = await bv.reference
+                  .collection('danh_sach')
+                  .where('email', isEqualTo: cleanEmailLower)
+                  .limit(1)
+                  .get();
+              if (qSubDongLower.docs.isNotEmpty) return qSubDongLower.docs.first;
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+
       // 1.4 Quét collectionGroup('NhanVien')
       try {
         final qNv = await _firestore.collectionGroup('NhanVien').where('email', isEqualTo: cleanEmail).limit(1).get();
@@ -1264,6 +1309,51 @@ class FirebaseServiceC1 {
 
     // 2. TÌM THEO MÃ NHÂN VIÊN
     if (cleanMa != null && cleanMa.isNotEmpty) {
+      // 2.0 Suy ra bệnh viện từ chính mã nhân viên: BV508_BS_DL_02 → BV508
+      // rồi tra đúng cấu trúc NhanVien/{bvId}/danh_sach/{maNhanVien}
+      final bvidTuMa = benhVienIdTuMaNhanVien(cleanMa);
+      if (bvidTuMa.isNotEmpty) {
+        try {
+          final docTheoBv = await _firestore
+              .collection('NhanVien')
+              .doc(bvidTuMa)
+              .collection('danh_sach')
+              .doc(cleanMa)
+              .get();
+          if (docTheoBv.exists) return docTheoBv;
+        } catch (_) {}
+        try {
+          final qTheoBv = await _firestore
+              .collection('NhanVien')
+              .doc(bvidTuMa)
+              .collection('danh_sach')
+              .where('ma_nhan_vien', isEqualTo: cleanMa)
+              .limit(1)
+              .get();
+          if (qTheoBv.docs.isNotEmpty) return qTheoBv.docs.first;
+        } catch (_) {}
+      }
+
+      // 2.0b Quét ĐỘNG mọi bệnh viện đang có trong collection 'NhanVien'
+      // (không phụ thuộc danh sách cứng nữa — hỗ trợ BV508, BV509…)
+      try {
+        final dsBenhVien = await _firestore.collection('NhanVien').limit(50).get();
+        for (final bv in dsBenhVien.docs) {
+          try {
+            final docTrongBv = await bv.reference.collection('danh_sach').doc(cleanMa).get();
+            if (docTrongBv.exists) return docTrongBv;
+          } catch (_) {}
+          try {
+            final qTrongBv = await bv.reference
+                .collection('danh_sach')
+                .where('ma_nhan_vien', isEqualTo: cleanMa)
+                .limit(1)
+                .get();
+            if (qTrongBv.docs.isNotEmpty) return qTrongBv.docs.first;
+          } catch (_) {}
+        }
+      } catch (_) {}
+
       // 2.1 DocId trực tiếp trong 'NhanVien' cấp 1
       try {
         final doc1 = await _firestore.collection('NhanVien').doc(cleanMa).get();
@@ -1405,7 +1495,32 @@ class FirebaseServiceC1 {
     // 4. Nếu tìm thấy Document nhân viên
     if (targetDoc != null && targetDoc.exists) {
       final data = targetDoc.data()!;
-      final matKhauDb = (data['mat_khau'] ?? '').toString();
+      // Hỗ trợ nhiều tên trường mật khẩu đang dùng trong project
+      final matKhauDb = (data['mat_khau'] ??
+              data['password'] ??
+              data['matKhau'] ??
+              data['mk'] ??
+              data['pass'] ??
+              '')
+          .toString();
+
+      final ketQua = <String, dynamic>{
+        'id': targetDoc.id,
+        'docPath': targetDoc.reference.path,
+        ...data,
+      };
+
+      // Tự bổ sung mã bệnh viện nếu document chưa lưu — suy ra từ chính đường dẫn
+      // NhanVien/{bvId}/danh_sach/{maNhanVien} (VD: NhanVien/BV508/danh_sach/BV508_BS_DL_02).
+      final bvidTheoDuongDan = benhVienIdTuDuongDan(targetDoc.reference.path);
+      if (bvidTheoDuongDan.isNotEmpty) {
+        if ((ketQua['benh_vien_id'] ?? '').toString().trim().isEmpty) {
+          ketQua['benh_vien_id'] = bvidTheoDuongDan;
+        }
+        if ((ketQua['ma_benh_vien'] ?? '').toString().trim().isEmpty) {
+          ketQua['ma_benh_vien'] = bvidTheoDuongDan;
+        }
+      }
 
       // Nếu đã xác thực Auth thành công -> Mật khẩu đúng 100%, tự động đồng bộ mật khẩu & UID vào Firestore
       if (authCred != null) {
@@ -1417,7 +1532,8 @@ class FirebaseServiceC1 {
             }, SetOptions(merge: true));
           } catch (_) {}
         }
-        return {'id': targetDoc.id, 'docPath': targetDoc.reference.path, ...data, 'mat_khau': pass};
+        ketQua['mat_khau'] = pass;
+        return ketQua;
       }
 
       // Nếu Auth chưa xác thực được -> Kiểm tra mật khẩu lưu trong Firestore
@@ -1425,7 +1541,7 @@ class FirebaseServiceC1 {
         throw Exception('Mật khẩu không chính xác!');
       }
 
-      return {'id': targetDoc.id, 'docPath': targetDoc.reference.path, ...data};
+      return ketQua;
     }
 
     // 5. Nếu không tìm thấy Document nhân viên nào
