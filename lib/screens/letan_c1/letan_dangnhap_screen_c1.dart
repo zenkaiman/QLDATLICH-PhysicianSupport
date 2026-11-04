@@ -4,6 +4,7 @@ import '../../config/app_session.dart';
 import '../../models/letan_c1/letan_design_system_c1.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
 import '../../services/letan_c1/letan_firebase_service_c1.dart';
+import '../../utils/role_helper.dart';
 import 'cskh_duyetdon_khoa_screen_c1.dart';
 import 'letan_thietlap_thongtin_screen_c1.dart';
 import 'letan_trangchu_screen_c1.dart';
@@ -78,8 +79,8 @@ class _LetanDangnhapScreenC1State extends State<LetanDangnhapScreenC1> {
       setState(() => _dangXuLy = false);
 
       final daKichHoat = user?['da_kich_hoat'] == true;
-      final role = (user?['role'] ?? 'le_tan').toString();
-      final maNhanVien = (user?['ma_tai_khoan'] ?? input).toString();
+      final role = (user?['role'] ?? user?['vai_tro'] ?? user?['vai_tro_chuan'] ?? 'le_tan').toString();
+      final maNhanVien = (user?['ma_nhan_vien'] ?? user?['ma_tai_khoan'] ?? input).toString();
 
       // TRƯỜNG HỢP 1: Lần đầu đăng nhập bằng mã nhân viên chưa kích hoạt -> Sang Màn hình 3
       if (!daKichHoat) {
@@ -105,8 +106,15 @@ class _LetanDangnhapScreenC1State extends State<LetanDangnhapScreenC1> {
       // Cập nhật thông tin profile hiện tại khớp hoàn toàn với tài khoản Firestore vừa đăng nhập
       final emailReal = (user?['email'] ?? (input.contains('@') ? input : '')).toString();
       final hoTenReal = (user?['ho_ten'] ?? 'Nhân Viên').toString();
-      final chucVuReal = (user?['chuc_vu'] ?? (role == 'le_tan' ? 'Lễ tân tiếp đón' : 'Chăm sóc khách hàng')).toString();
-      final khoaReal = (user?['khoa'] ?? (role == 'le_tan' ? 'Khoa Khám Bệnh' : 'Bộ Phận CSKH & Tiếp Nhận')).toString();
+      // Chức vụ đúng vai trò nhân viên (không mặc định Lễ tân)
+      final chucVuReal = (user?['chuc_vu_hien_thi'] ??
+              VaiTroNhanVienHelper.nhan(role, maNhanVien: maNhanVien))
+          .toString();
+      final khoaReal = (user?['khoa'] ??
+              (VaiTroNhanVienHelper.maVaiTro(role, maNhanVien: maNhanVien) == VaiTroNhanVienHelper.cskh
+                  ? 'Bộ Phận CSKH & Tiếp Nhận'
+                  : 'Khoa Khám Bệnh'))
+          .toString();
       // Xác định bệnh viện: document → đường dẫn NhanVien/{bvId}/danh_sach/… → mã nhân viên
       var benhVienIdReal =
           (user?['benh_vien_id'] ?? user?['ma_benh_vien'] ?? '').toString().trim();

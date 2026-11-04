@@ -7,6 +7,7 @@ import '../auth/login_screen.dart';
 import 'letan_capnhat_profile_screen_c1.dart';
 import 'letan_doimatkhau_screen_c1.dart';
 import 'letan_quenmatkhau_screen_c1.dart';
+import '../../utils/role_helper.dart';
 
 class LetanProfileTabC1 extends StatefulWidget {
   final VoidCallback? onDangXuat;
@@ -40,7 +41,13 @@ class _LetanProfileTabC1State extends State<LetanProfileTabC1> {
             maNhanVien: (data['ma_nhan_vien'] ?? data['ma_tai_khoan'] ?? _thongTin.maNhanVien).toString(),
             email: (data['email'] ?? _thongTin.email).toString(),
             hoTen: (data['ho_ten'] ?? _thongTin.hoTen).toString(),
-            chucVu: (data['chuc_vu'] ?? _thongTin.chucVu).toString(),
+            chucVu: (data['chuc_vu_hien_thi'] ??
+                    data['chuc_vu'] ??
+                    VaiTroNhanVienHelper.nhan(
+                      (data['vai_tro'] ?? data['role'] ?? _thongTin.chucVu).toString(),
+                      maNhanVien: (data['ma_nhan_vien'] ?? _thongTin.maNhanVien).toString(),
+                    ))
+                .toString(),
             khoa: widget.tenKhoaHienTai ?? (data['khoa'] ?? _thongTin.khoa).toString(),
             tenBenhVien: (data['ten_benh_vien'] ?? data['tenBenhVien'] ?? _thongTin.tenBenhVien).toString(),
             benhVienId: (data['benh_vien_id'] ?? data['ma_benh_vien'] ?? _thongTin.benhVienId).toString(),

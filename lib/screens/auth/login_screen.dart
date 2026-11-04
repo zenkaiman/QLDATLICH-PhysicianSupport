@@ -13,6 +13,7 @@ import '../../support_doctor/clinic_firestore_service.dart';
 import '../../support_doctor/department_room_picker.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
 import '../../services/letan_c1/letan_firebase_service_c1.dart';
+import '../../utils/role_helper.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -83,7 +84,11 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         if (nhanVienData != null) {
-          final role = (nhanVienData['role'] ?? nhanVienData['vai_tro'] ?? '').toString();
+          final role = (nhanVienData['role'] ??
+                  nhanVienData['vai_tro'] ??
+                  nhanVienData['vai_tro_chuan'] ??
+                  '')
+              .toString();
           final bool daKichHoat = (nhanVienData['da_kich_hoat'] == true) ||
               (nhanVienData['trang_thai'] == 'dang_hoat_dong');
           final maNvThucTe = (nhanVienData['ma_nhan_vien'] ??
@@ -114,17 +119,16 @@ class _LoginScreenState extends State<LoginScreen> {
               DuLieuProfileMauC1.thongTinHienTai.copyWith(
             maNhanVien: maNvThucTe,
             hoTen: (nhanVienData['ho_ten'] ?? 'Nhân viên').toString(),
-            chucVu: (nhanVienData['chuc_vu'] ??
-                    (role.contains('cskh') ||
-                            role.contains('customer') ||
-                            role.contains('cham_soc')
-                        ? 'Chăm sóc khách hàng'
-                        : 'Lễ tân tiếp đón'))
+            // Chức vụ lấy theo đúng vai trò nhân viên:
+            // ưu tiên `chuc_vu_hien_thi` (đã chuẩn hoá từ document NhanVien),
+            // nếu không có thì suy ra từ vai trò / mã nhân viên
+            // (bac_si → "Bác sĩ", le_tan → "Lễ tân tiếp đón", cskh → "Chuyên viên CSKH"…)
+            chucVu: (nhanVienData['chuc_vu_hien_thi'] ??
+                    VaiTroNhanVienHelper.nhan(role, maNhanVien: maNvThucTe))
                 .toString(),
             khoa: (nhanVienData['khoa'] ??
-                    (role.contains('cskh') ||
-                            role.contains('customer') ||
-                            role.contains('cham_soc')
+                    (VaiTroNhanVienHelper.maVaiTro(role, maNhanVien: maNvThucTe) ==
+                            VaiTroNhanVienHelper.cskh
                         ? 'Bộ Phận CSKH & Tiếp Nhận'
                         : 'Khoa Khám Bệnh'))
                 .toString(),

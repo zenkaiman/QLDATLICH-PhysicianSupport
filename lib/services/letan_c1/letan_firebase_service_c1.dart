@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 // import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
+import '../../utils/role_helper.dart';
 import '../../models/letan_c1/letan_qr_model_c1.dart';
 import '../patient_notification_service.dart';
 
@@ -1201,6 +1202,68 @@ class FirebaseServiceC1 {
   // XÁC THỰC VÀ QUẢN LÝ TÀI KHOẢN NHÂN VIÊN C1
   // ==========================================
 
+  /// Chuẩn hoá thông tin nhân viên trả về cho UI:
+  /// - `vai_tro_chuan`: mã vai trò (bac_si / le_tan / cskh / ho_tro_bac_si / …)
+  /// - `chuc_vu_hien_thi`: nhãn tiếng Việt đúng vai trò (không mặc định Lễ tân)
+  /// - bổ sung `khoa` suy ra từ mã nhân viên và `benh_vien_id` suy ra từ đường dẫn
+  static Map<String, dynamic> chuanHoaThongTinNhanVien(
+    Map<String, dynamic> data, {
+    String? docId,
+    String? docPath,
+  }) {
+    final ketQua = <String, dynamic>{...data};
+
+    final maNv = (data['ma_nhan_vien'] ??
+            data['ma_tai_khoan'] ??
+            data['maNhanVien'] ??
+            docId ??
+            '')
+        .toString()
+        .trim();
+    final vaiTroRaw = (data['vai_tro'] ??
+            data['role'] ??
+            data['ma_vai_tro'] ??
+            data['ten_vai_tro'] ??
+            '')
+        .toString();
+    final chucVuDoc = (data['chuc_vu'] ?? data['chuc_danh'] ?? '').toString().trim();
+    final khoaDoc = (data['khoa'] ?? data['chuyen_khoa'] ?? data['ten_khoa'] ?? '').toString().trim();
+
+    final maVaiTro = VaiTroNhanVienHelper.maVaiTro(vaiTroRaw, maNhanVien: maNv);
+
+    if (maNv.isNotEmpty) ketQua['ma_nhan_vien'] = maNv;
+    ketQua['vai_tro_chuan'] = maVaiTro;
+    ketQua['chuc_vu_hien_thi'] = chucVuDoc.isNotEmpty
+        ? chucVuDoc
+        : VaiTroNhanVienHelper.nhan(vaiTroRaw, maNhanVien: maNv);
+
+    if (khoaDoc.isEmpty) {
+      final khoaSuyRa = VaiTroNhanVienHelper.chuyenKhoaTuMa(maNv);
+      if (khoaSuyRa.isNotEmpty) ketQua['khoa'] = khoaSuyRa;
+    }
+
+    // Document không khai báo vai trò → dùng vai trò suy ra từ mã để điều hướng đúng
+    if (vaiTroRaw.trim().isEmpty && maVaiTro != VaiTroNhanVienHelper.khac) {
+      ketQua['role'] = maVaiTro;
+    }
+
+    final duongDan = (docPath ?? (ketQua['docPath'] ?? '')).toString();
+    if (duongDan.isNotEmpty && (ketQua['docPath'] ?? '').toString().isEmpty) {
+      ketQua['docPath'] = duongDan;
+    }
+    final bvidTheoDuongDan = benhVienIdTuDuongDan(duongDan);
+    if (bvidTheoDuongDan.isNotEmpty) {
+      if ((ketQua['benh_vien_id'] ?? '').toString().trim().isEmpty) {
+        ketQua['benh_vien_id'] = bvidTheoDuongDan;
+      }
+      if ((ketQua['ma_benh_vien'] ?? '').toString().trim().isEmpty) {
+        ketQua['ma_benh_vien'] = bvidTheoDuongDan;
+      }
+    }
+
+    return ketQua;
+  }
+
   /// Suy ra mã bệnh viện từ mã nhân viên.
   /// Ví dụ: BV508_BS_DL_02 → BV508, bv508_lt_01 → BV508
   static String benhVienIdTuMaNhanVien(String? maNhanVien) {
@@ -1504,23 +1567,15 @@ class FirebaseServiceC1 {
               '')
           .toString();
 
+      // Chuẩn hoá vai trò/chức vụ/bệnh viện để UI hiện đúng vai trò nhân viên
       final ketQua = <String, dynamic>{
         'id': targetDoc.id,
-        'docPath': targetDoc.reference.path,
-        ...data,
+        ...chuanHoaThongTinNhanVien(
+          data,
+          docId: targetDoc.id,
+          docPath: targetDoc.reference.path,
+        ),
       };
-
-      // Tự bổ sung mã bệnh viện nếu document chưa lưu — suy ra từ chính đường dẫn
-      // NhanVien/{bvId}/danh_sach/{maNhanVien} (VD: NhanVien/BV508/danh_sach/BV508_BS_DL_02).
-      final bvidTheoDuongDan = benhVienIdTuDuongDan(targetDoc.reference.path);
-      if (bvidTheoDuongDan.isNotEmpty) {
-        if ((ketQua['benh_vien_id'] ?? '').toString().trim().isEmpty) {
-          ketQua['benh_vien_id'] = bvidTheoDuongDan;
-        }
-        if ((ketQua['ma_benh_vien'] ?? '').toString().trim().isEmpty) {
-          ketQua['ma_benh_vien'] = bvidTheoDuongDan;
-        }
-      }
 
       // Nếu đã xác thực Auth thành công -> Mật khẩu đúng 100%, tự động đồng bộ mật khẩu & UID vào Firestore
       if (authCred != null) {
