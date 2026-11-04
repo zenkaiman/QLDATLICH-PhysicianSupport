@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../config/app_session.dart';
 import '../../models/letan_c1/letan_design_system_c1.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
 import '../../services/letan_c1/letan_firebase_service_c1.dart';
@@ -106,7 +107,16 @@ class _LetanDangnhapScreenC1State extends State<LetanDangnhapScreenC1> {
       final hoTenReal = (user?['ho_ten'] ?? 'Nhân Viên').toString();
       final chucVuReal = (user?['chuc_vu'] ?? (role == 'le_tan' ? 'Lễ tân tiếp đón' : 'Chăm sóc khách hàng')).toString();
       final khoaReal = (user?['khoa'] ?? (role == 'le_tan' ? 'Khoa Khám Bệnh' : 'Bộ Phận CSKH & Tiếp Nhận')).toString();
-      final benhVienIdReal = (user?['benh_vien_id'] ?? '1').toString();
+      // Xác định bệnh viện: document → đường dẫn NhanVien/{bvId}/danh_sach/… → mã nhân viên
+      var benhVienIdReal =
+          (user?['benh_vien_id'] ?? user?['ma_benh_vien'] ?? '').toString().trim();
+      if (benhVienIdReal.isEmpty) {
+        benhVienIdReal = FirebaseServiceC1.benhVienIdTuDuongDan((user?['docPath'] ?? '').toString());
+      }
+      if (benhVienIdReal.isEmpty) {
+        benhVienIdReal = FirebaseServiceC1.benhVienIdTuMaNhanVien(maNhanVien);
+      }
+      if (benhVienIdReal.isNotEmpty) AppSession.benhVienId = benhVienIdReal;
 
       DuLieuProfileMauC1.thongTinHienTai = DuLieuProfileMauC1.thongTinHienTai.copyWith(
         email: emailReal,

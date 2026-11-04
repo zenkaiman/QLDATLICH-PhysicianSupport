@@ -90,10 +90,22 @@ class _LoginScreenState extends State<LoginScreen> {
                   nhanVienData['ma_tai_khoan'] ??
                   email)
               .toString();
-          final bvId = (nhanVienData['ma_benh_vien'] ??
+          // Xác định đúng bệnh viện: ưu tiên dữ liệu document → đường dẫn
+          // NhanVien/{bvId}/danh_sach/{ma} → chính mã nhân viên
+          // (VD: BV508_BS_DL_02 → BV508)
+          final duongDanNv = (nhanVienData['docPath'] ?? '').toString();
+          var bvId = (nhanVienData['ma_benh_vien'] ??
                   nhanVienData['benh_vien_id'] ??
-                  'BV502')
-              .toString();
+                  nhanVienData['benhVienId'] ??
+                  '')
+              .toString()
+              .trim();
+          if (bvId.isEmpty) {
+            bvId = FirebaseServiceC1.benhVienIdTuDuongDan(duongDanNv);
+          }
+          if (bvId.isEmpty) {
+            bvId = FirebaseServiceC1.benhVienIdTuMaNhanVien(maNvThucTe);
+          }
           final tenBv = (nhanVienData['ten_benh_vien'] ?? 'Bệnh viện Quân y 17')
               .toString();
 
@@ -121,6 +133,10 @@ class _LoginScreenState extends State<LoginScreen> {
             tenBenhVien: tenBv,
           );
 
+          // Ghi nhớ bệnh viện của phiên đăng nhập để mọi truy vấn
+          // (lịch hẹn, thông báo bệnh nhân, nhân viên…) dùng đúng bệnh viện.
+          if (bvId.isNotEmpty) AppSession.benhVienId = bvId;
+
           // Tự động ghi nhớ phiên đăng nhập
           await FirebaseServiceC1.luuPhienDangNhap(
               taiKhoan: email, matKhau: password);
@@ -141,24 +157,29 @@ class _LoginScreenState extends State<LoginScreen> {
           }
 
           // Đã kích hoạt -> Điều hướng chính xác theo vai trò
-          if (role == 'customerSupport' ||
-              role == 'cskh' ||
-              role == 'cham_soc_khach_hang') {
+          // (so khớp linh hoạt: customerSupport / cskh / cham_soc_khach_hang,
+          //  bac_si / BS_DL / doctor, le_tan / receptionist…)
+          final roleLower = role.trim().toLowerCase();
+          final laCskh = roleLower.contains('cskh') ||
+              roleLower.contains('customer') ||
+              roleLower.contains('cham_soc') ||
+              roleLower.contains('chamsoc');
+          final laBacSi = roleLower.contains('bac_si') ||
+              roleLower.contains('bacsi') ||
+              roleLower.contains('doctor') ||
+              roleLower.contains('bs');
+          final laLeTan = roleLower.contains('le_tan') ||
+              roleLower.contains('letan') ||
+              roleLower.contains('reception');
+
+          if (laCskh) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
                   builder: (_) => const CskhDuyetdonKhoaScreenC1()),
             );
             return;
-          } else if (role == 'receptionist' || role == 'le_tan') {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const LeTanHomeScreenC1()),
-            );
-            return;
-          } else if (role == 'doctorAssistant' ||
-              role == 'ho_tro_bac_si' ||
-              role == 'bac_si') {
+          } else if (laBacSi) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
@@ -169,6 +190,12 @@ class _LoginScreenState extends State<LoginScreen> {
                       : DuLieuProfileMauC1.thongTinHienTai.tenBenhVien,
                 ),
               ),
+            );
+            return;
+          } else if (laLeTan) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const LeTanHomeScreenC1()),
             );
             return;
           } else {
