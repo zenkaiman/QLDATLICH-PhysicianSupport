@@ -74,6 +74,25 @@ class ClinicFirestoreService {
   /// `benh_nhan_id` để hiện `ho_ten` dưới STT tương ứng.
   static const String patientsCollection = 'BenhNhan';
 
+  /// Các trường dùng để tra ngược hồ sơ bệnh nhân khi lịch hẹn chỉ có
+  /// mã bệnh nhân / số điện thoại / CCCD thay vì mã document `BenhNhan`.
+  static const List<String> patientIdentifierFields = <String>[
+    'ma_benh_nhan',
+    'maBenhNhan',
+    'ma_bn',
+    'maBn',
+    'benh_nhan_id',
+    'benhNhanId',
+    'uid',
+    'so_dien_thoai',
+    'soDienThoai',
+    'dien_thoai',
+    'sdt',
+    'phone',
+    'so_cccd',
+    'cccd',
+  ];
+
   /// Mã trạng thái lịch hẹn được đưa vào hàng chờ: Đã xác nhận.
   static const String confirmedStatusId = '2';
 
@@ -106,6 +125,48 @@ class ClinicFirestoreService {
               : entry.value,
       };
 
+
+  /// Tra tên bệnh nhân trong `BenhNhan` khi lịch hẹn không mở được hồ sơ
+  /// bằng mã document: thử mở chính `BenhNhan/{định danh}`, rồi lần lượt
+  /// truy vấn theo [patientIdentifierFields]. Không tìm được thì trả rỗng
+  /// để hàng chờ vẫn chạy bình thường, chỉ không hiện tên.
+  Future<String> _findPatientNameByIdentifier(String identifier) async {
+    final value = identifier.trim();
+    if (value.isEmpty) return '';
+
+    // 1. Định danh có thể chính là mã document `BenhNhan/{id}`.
+    try {
+      final snapshot = await _firestore
+          .collection(patientsCollection)
+          .doc(value)
+          .get();
+      final data = snapshot.data();
+      if (snapshot.exists && data != null) {
+        final name = clinicPatientProfileName(_appointmentData(data));
+        if (name.isNotEmpty) return name;
+      }
+    } catch (_) {
+      // Lỗi quyền/mạng: thử tiếp các trường định danh bên dưới.
+    }
+
+    // 2. Tra theo mã bệnh nhân / số điện thoại / CCCD.
+    for (final field in patientIdentifierFields) {
+      try {
+        final query = await _firestore
+            .collection(patientsCollection)
+            .where(field, isEqualTo: value)
+            .limit(1)
+            .get();
+        for (final doc in query.docs) {
+          final name = clinicPatientProfileName(_appointmentData(doc.data()));
+          if (name.isNotEmpty) return name;
+        }
+      } catch (_) {
+        // Trường không tồn tại trong dữ liệu: bỏ qua, thử trường tiếp theo.
+      }
+    }
+    return '';
+  }
 
   Query<Map<String, dynamic>> _roomsOf(String hospitalId) => _firestore
       .collection(roomsCollection)
@@ -217,6 +278,10 @@ class ClinicFirestoreService {
     final profileSubscriptions =
         <String, StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>>{};
     final profileNamesById = <String, String>{};
+    // Tên tra được theo định danh dự phòng (mã bệnh nhân / số điện thoại /
+    // CCCD) khi lịch hẹn không có mã document BenhNhan.
+    final lookupNamesByKey = <String, String>{};
+    final pendingLookupKeys = <String>{};
     _AppointmentQueueDraft? latestDraft;
     var isCancelled = false;
 
@@ -229,6 +294,7 @@ class ClinicFirestoreService {
         _appointmentQueueUpdateFromDraft(
           draft,
           patientNamesById: profileNamesById,
+          patientNamesByLookupKey: lookupNamesByKey,
         ),
       );
     }
@@ -237,6 +303,29 @@ class ClinicFirestoreService {
       if (!isCancelled && !controller.isClosed) {
         controller.addError(error, stackTrace);
       }
+    }
+
+    /// Tra tên bệnh nhân theo định danh dự phòng (mã bệnh nhân / số điện
+    /// thoại / CCCD) khi lịch hẹn không có mã document BenhNhan. Kết quả
+    /// được nhớ lại để không truy vấn lặp lại.
+    void resolvePatientNameByIdentifier(String identifier) {
+      final key = identifier.trim();
+      if (key.isEmpty || isCancelled) return;
+      if (lookupNamesByKey.containsKey(key)) return;
+      if (!pendingLookupKeys.add(key)) return;
+      unawaited(
+        _findPatientNameByIdentifier(key)
+            .then((name) {
+              pendingLookupKeys.remove(key);
+              if (isCancelled) return;
+              final truoc = lookupNamesByKey[key];
+              lookupNamesByKey[key] = name;
+              if (truoc != name) emit();
+            })
+            .catchError((Object _) {
+              pendingLookupKeys.remove(key);
+            }),
+      );
     }
 
     void syncProfileSubscriptions(_AppointmentQueueDraft draft) {
@@ -265,10 +354,16 @@ class ClinicFirestoreService {
                 final data = snapshot.data();
                 final name = data == null
                     ? ''
-                    : clinicPatientProfileName(data);
+                    : clinicPatientProfileName(_appointmentData(data));
                 if (profileNamesById[patientId] == name) return;
                 if (name.isEmpty) {
                   profileNamesById.remove(patientId);
+                  // `BenhNhan/{id}` không tồn tại (id trong lịch hẹn không
+                  // phải mã document) → tra ngược theo mã bệnh nhân /
+                  // số điện thoại / CCCD.
+                  if (!snapshot.exists) {
+                    resolvePatientNameByIdentifier(patientId);
+                  }
                 } else {
                   profileNamesById[patientId] = name;
                 }
@@ -280,8 +375,23 @@ class ClinicFirestoreService {
                 final subscription = profileSubscriptions.remove(patientId);
                 if (subscription != null) unawaited(subscription.cancel());
                 if (profileNamesById.remove(patientId) != null) emit();
+                // Không mở được `BenhNhan/{id}`: thử tra theo định danh khác.
+                resolvePatientNameByIdentifier(patientId);
               },
             );
+      }
+
+      // Lịch hẹn không có mã document BenhNhan (hoặc mã đó không mở được):
+      // tra theo mã bệnh nhân / số điện thoại / CCCD chép trong lịch hẹn.
+      for (final entry in draft.patientLookupKeyByNumber.entries) {
+        if (draft.directPatientNameByNumber.containsKey(entry.key)) continue;
+        final patientId = draft.patientIdByNumber[entry.key];
+        final daCoTenDungId =
+            patientId != null && (profileNamesById[patientId] ?? '').isNotEmpty;
+        final daCoTenTheoKhoa =
+            (lookupNamesByKey[entry.value] ?? '').isNotEmpty;
+        if (daCoTenDungId || daCoTenTheoKhoa) continue;
+        resolvePatientNameByIdentifier(entry.value);
       }
     }
 
@@ -745,15 +855,126 @@ String clinicAppointmentStatusId(Map<String, Object?> data) =>
       'trang_thai',
     ]);
 
-/// Mã bệnh nhân của lịch hẹn (trường `benh_nhan_id`); thiếu thì rỗng.
-String clinicAppointmentPatientId(Map<String, Object?> data) =>
-    _stringOrNumberField(data, const [
+/// Chuyển một map lồng (ví dụ `benh_nhan: {...}`) thành map có khoá chuỗi.
+Map<String, Object?>? _mapField(
+  Map<String, Object?> data,
+  List<String> keys,
+) {
+  for (final key in keys) {
+    final value = data[key];
+    if (value is Map) {
+      return <String, Object?>{
+        for (final entry in value.entries) entry.key.toString(): entry.value,
+      };
+    }
+  }
+  return null;
+}
+
+/// Mã document bệnh nhân của lịch hẹn — chính là id dùng để mở
+/// `BenhNhan/{id}` (ví dụ `VPkPhymIjzZlE25gI84kEX010Hs1`).
+///
+/// Dữ liệu thực tế đặt tên trường rất khác nhau nên hàm đọc lần lượt các
+/// biến thể thường gặp, kể cả khi id nằm trong map lồng
+/// (`benh_nhan.id`, `patient.uid`, `khach_hang.id`…). Thiếu thì rỗng.
+String clinicAppointmentPatientId(Map<String, Object?> data) {
+  final direct = _stringOrNumberField(data, const [
+    'benh_nhan_id',
+    'benhNhanId',
+    'benh_nhan_uid',
+    'benhNhanUid',
+    'patient_id',
+    'patientId',
+    'patient_uid',
+    'patientUid',
+    'nguoi_dung_id',
+    'nguoiDungId',
+    'nguoi_benh_id',
+    'nguoiBenhId',
+    'user_id',
+    'userId',
+    'uid',
+    'tai_khoan_id',
+    'taiKhoanId',
+    'id_benh_nhan',
+    'idBenhNhan',
+    'khach_hang_id',
+    'khachHangId',
+    'ho_so_id',
+    'hoSoId',
+  ]);
+  if (direct.isNotEmpty) return direct;
+
+  final nested = _mapField(data, const [
+    'benh_nhan',
+    'benhNhan',
+    'patient',
+    'khach_hang',
+    'khachHang',
+    'nguoi_dung',
+    'nguoiDung',
+  ]);
+  if (nested != null) {
+    return _stringOrNumberField(nested, const [
+      'id',
+      'uid',
       'benh_nhan_id',
       'benhNhanId',
-      'patientId',
-      'benh_nhan_uid',
-      'patientUid',
+      'ma_benh_nhan',
+      'maBenhNhan',
+      'document_id',
+      'documentId',
+      'doc_id',
+      'docId',
     ]);
+  }
+  return '';
+}
+
+/// Định danh dự phòng của bệnh nhân khi lịch hẹn không có mã document:
+/// mã bệnh nhân, số điện thoại, CCCD… Dùng để tra ngược `BenhNhan`.
+String clinicAppointmentPatientLookupKey(Map<String, Object?> data) {
+  final direct = _stringOrNumberField(data, const [
+    'ma_benh_nhan',
+    'maBenhNhan',
+    'ma_bn',
+    'maBn',
+    'code_benh_nhan',
+    'patientCode',
+    'so_dien_thoai',
+    'soDienThoai',
+    'dien_thoai',
+    'dienThoai',
+    'sdt',
+    'phone',
+    'phone_number',
+    'phoneNumber',
+    'so_cccd',
+    'soCccd',
+    'cccd',
+  ]);
+  if (direct.isNotEmpty) return direct;
+  final nested = _mapField(data, const [
+    'benh_nhan',
+    'benhNhan',
+    'patient',
+    'khach_hang',
+    'khachHang',
+  ]);
+  if (nested == null) return '';
+  return _stringOrNumberField(nested, const [
+    'ma_benh_nhan',
+    'maBenhNhan',
+    'ma_bn',
+    'so_dien_thoai',
+    'soDienThoai',
+    'dien_thoai',
+    'sdt',
+    'phone',
+    'so_cccd',
+    'cccd',
+  ]);
+}
 
 String _normalizePatientName(String? value) =>
     (value ?? '').trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -761,45 +982,124 @@ String _normalizePatientName(String? value) =>
 /// Tên bệnh nhân chép sẵn ngay trong document lịch hẹn, nếu có.
 /// Trường chuẩn hiện tại là `ten_benh_nhan`/`ho_ten`; các tên còn lại là
 /// biến thể dự phòng để dữ liệu lệch chuẩn một chút vẫn đọc được.
-String clinicAppointmentPatientName(Map<String, Object?> data) =>
-    _normalizePatientName(
-      _firstStringField(data, const [
-        'ten_benh_nhan',
-        'tenBenhNhan',
-        'ho_ten_benh_nhan',
-        'hoTenBenhNhan',
-        'ho_ten',
-        'hoTen',
-        'ho_va_ten',
-        'hoVaTen',
-        'patientName',
-        'patient_name',
-        'fullName',
-        'displayName',
-        'name',
-        'ten',
-      ]),
-    );
+String clinicAppointmentPatientName(Map<String, Object?> data) {
+  const nameKeys = <String>[
+    'ten_benh_nhan',
+    'tenBenhNhan',
+    'ho_ten_benh_nhan',
+    'hoTenBenhNhan',
+    'ho_ten',
+    'hoTen',
+    'ho_va_ten',
+    'hoVaTen',
+    'patientName',
+    'patient_name',
+    'fullName',
+    'display_name',
+    'displayName',
+    'name',
+    'ten',
+  ];
+  final direct = _firstStringField(data, nameKeys);
+  if (direct != null) return _normalizePatientName(direct);
+
+  // Tên có thể nằm trong map bệnh nhân lồng trong lịch hẹn
+  // (`benh_nhan: {ho_ten: ...}`).
+  final nested = _mapField(data, const [
+    'benh_nhan',
+    'benhNhan',
+    'patient',
+    'khach_hang',
+    'khachHang',
+  ]);
+  if (nested != null) {
+    return _normalizePatientName(_firstStringField(nested, nameKeys));
+  }
+  return '';
+}
 
 /// Tên bệnh nhân trong document hồ sơ BenhNhan/{benh_nhan_id}.
-/// Trường chuẩn hiện tại là `ho_ten`.
-String clinicPatientProfileName(Map<String, Object?> data) =>
-    _normalizePatientName(
-      _firstStringField(data, const [
-        'ho_ten',
-        'hoTen',
-        'ho_va_ten',
-        'hoVaTen',
-        'ten_benh_nhan',
-        'tenBenhNhan',
-        'fullName',
-        'displayName',
-        'patientName',
-        'patient_name',
-        'name',
-        'ten',
-      ]),
-    );
+///
+/// Đọc được cả trường phẳng (`ho_ten`, `ten`…) và trường lồng
+/// (`thong_tin_ca_nhan.ho_ten`), hoặc ghép `ho`/`ho_dem` với `ten`
+/// khi dữ liệu tách riêng họ và tên.
+String clinicPatientProfileName(Map<String, Object?> data) {
+  const nameKeys = <String>[
+    'ho_ten',
+    'hoTen',
+    'ho_va_ten',
+    'hoVaTen',
+    'ho_ten_benh_nhan',
+    'hoTenBenhNhan',
+    'ten_benh_nhan',
+    'tenBenhNhan',
+    'ten_bn',
+    'tenBn',
+    'ho_ten_bn',
+    'hoTenBn',
+    'ten_day_du',
+    'tenDayDu',
+    'fullName',
+    'full_name',
+    'displayName',
+    'display_name',
+    'patientName',
+    'patient_name',
+    'name',
+    'ten',
+  ];
+
+  final direct = _firstStringField(data, nameKeys);
+  if (direct != null) return _normalizePatientName(direct);
+
+  final ho = _firstStringField(data, const [
+    'ho',
+    'ho_dem',
+    'hoDem',
+    'last_name',
+    'lastName',
+  ]);
+  final ten = _firstStringField(data, const [
+    'ten',
+    'first_name',
+    'firstName',
+    'ten_rieng',
+    'tenRieng',
+  ]);
+  if (ho != null && ten != null) return _normalizePatientName('$ho $ten');
+
+  final nested = _mapField(data, const [
+    'thong_tin_ca_nhan',
+    'thongTinCaNhan',
+    'thong_tin',
+    'thongTin',
+    'ca_nhan',
+    'caNhan',
+    'profile',
+    'ho_so',
+    'hoSo',
+  ]);
+  if (nested != null) {
+    final nestedName = _firstStringField(nested, nameKeys);
+    if (nestedName != null) return _normalizePatientName(nestedName);
+    final nestedHo = _firstStringField(nested, const [
+      'ho',
+      'ho_dem',
+      'hoDem',
+      'last_name',
+      'lastName',
+    ]);
+    final nestedTen = _firstStringField(nested, const [
+      'ten',
+      'first_name',
+      'firstName',
+    ]);
+    if (nestedHo != null && nestedTen != null) {
+      return _normalizePatientName('$nestedHo $nestedTen');
+    }
+  }
+  return '';
+}
 
 /// Ngày hẹn (chỉ phần ngày, giờ địa phương) của một lịch hẹn.
 ///
@@ -841,6 +1141,7 @@ typedef _AppointmentQueueDraft = ({
   List<int> numbers,
   Map<int, String> appointmentIdByNumber,
   Map<int, String> patientIdByNumber,
+  Map<int, String> patientLookupKeyByNumber,
   Map<int, String> directPatientNameByNumber,
 });
 
@@ -865,6 +1166,7 @@ _AppointmentQueueDraft _clinicAppointmentQueueDraftFromFirestore({
         ..sort((a, b) => a.$1.compareTo(b.$1));
   final appointmentIdByNumber = <int, String>{};
   final patientIdByNumber = <int, String>{};
+  final patientLookupKeyByNumber = <int, String>{};
   final directPatientNameByNumber = <int, String>{};
 
   for (final (appointmentId, data) in sortedAppointments) {
@@ -893,6 +1195,8 @@ _AppointmentQueueDraft _clinicAppointmentQueueDraftFromFirestore({
     appointmentIdByNumber[number] = appointmentId;
     final patientId = clinicAppointmentPatientId(data);
     if (patientId.isNotEmpty) patientIdByNumber[number] = patientId;
+    final lookupKey = clinicAppointmentPatientLookupKey(data);
+    if (lookupKey.isNotEmpty) patientLookupKeyByNumber[number] = lookupKey;
     final directPatientName = clinicAppointmentPatientName(data);
     if (directPatientName.isNotEmpty) {
       directPatientNameByNumber[number] = directPatientName;
@@ -910,6 +1214,11 @@ _AppointmentQueueDraft _clinicAppointmentQueueDraftFromFirestore({
         if (patientIdByNumber.containsKey(number))
           number: patientIdByNumber[number]!,
     },
+    patientLookupKeyByNumber: <int, String>{
+      for (final number in numbers)
+        if (patientLookupKeyByNumber.containsKey(number))
+          number: patientLookupKeyByNumber[number]!,
+    },
     directPatientNameByNumber: <int, String>{
       for (final number in numbers)
         if (directPatientNameByNumber.containsKey(number))
@@ -924,13 +1233,16 @@ _AppointmentQueueDraft _clinicAppointmentQueueDraftFromFirestore({
 AppointmentQueueUpdate _appointmentQueueUpdateFromDraft(
   _AppointmentQueueDraft draft, {
   Map<String, String> patientNamesById = const <String, String>{},
+  Map<String, String> patientNamesByLookupKey = const <String, String>{},
 }) {
   final patientNameByNumber = <int, String>{};
   for (final number in draft.numbers) {
     final patientId = draft.patientIdByNumber[number];
+    final lookupKey = draft.patientLookupKeyByNumber[number];
     final name = _normalizePatientName(
       draft.directPatientNameByNumber[number] ??
-          (patientId == null ? null : patientNamesById[patientId]),
+          (patientId == null ? null : patientNamesById[patientId]) ??
+          (lookupKey == null ? null : patientNamesByLookupKey[lookupKey]),
     );
     if (name.isNotEmpty) patientNameByNumber[number] = name;
   }
@@ -954,6 +1266,7 @@ AppointmentQueueUpdate clinicAppointmentQueueFromFirestore({
   required DateTime day,
   Set<String> eligibleStatusIds = const <String>{'2'},
   Map<String, String> patientNamesById = const <String, String>{},
+  Map<String, String> patientNamesByLookupKey = const <String, String>{},
 }) {
   final draft = _clinicAppointmentQueueDraftFromFirestore(
     appointments: appointments,
@@ -965,5 +1278,6 @@ AppointmentQueueUpdate clinicAppointmentQueueFromFirestore({
   return _appointmentQueueUpdateFromDraft(
     draft,
     patientNamesById: patientNamesById,
+    patientNamesByLookupKey: patientNamesByLookupKey,
   );
 }
