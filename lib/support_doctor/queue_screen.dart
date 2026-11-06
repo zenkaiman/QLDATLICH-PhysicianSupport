@@ -1542,6 +1542,9 @@ class _QueueScreenState extends State<QueueScreen> {
     int doi(int so) => renumber[so] ?? so;
 
     setState(() {
+      // Số đang khám cũng phải đổi theo: khi bệnh nhân đang khám xin đợi,
+      // người kế tiếp lên khám và nhận đúng số mới (vd 2 → 1).
+      current = doi(current);
       next = doi(next);
       waiting = <int>[for (final so in waiting) doi(so)];
       for (var i = 0; i < passed.length; i++) {
