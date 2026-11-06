@@ -433,6 +433,11 @@ class _QueueScreenState extends State<QueueScreen> {
   /// lịch hẹn trong lúc Firebase chưa kịp đổi trạng thái.
   final Set<int> _absentAppointmentNumbers = <int>{};
 
+  /// Tên bệnh nhân của các số đang nằm trong “SỐ ĐÃ CHO QUA”, giữ theo
+  /// đúng số lúc bấm “Đợi” để dải chip vẫn hiện đúng tên kể cả khi các số
+  /// phía sau đã được đánh lại (−1) và trùng số.
+  final Map<int, String> _patientNameDaChoQua = <int, String>{};
+
   /// Ánh xạ tạm mã lịch hẹn → số thứ tự MỚI vừa ghi sau khi chèn số.
   /// Luồng Firebase còn trả số cũ trong vài giây; ánh xạ này giữ nguyên
   /// số mới trên màn hình cho tới khi document trả về đúng số đó.
@@ -515,6 +520,9 @@ class _QueueScreenState extends State<QueueScreen> {
       _patientNameByNumber
         ..clear()
         ..addAll(snapshot.patientNameByNumber);
+      _patientNameDaChoQua
+        ..clear()
+        ..addAll(snapshot.deferredNameByNumber);
       paused = snapshot.paused;
     } else {
       // Lần đầu mở phòng: KHÔNG tự sinh số thứ tự.
@@ -562,6 +570,13 @@ class _QueueScreenState extends State<QueueScreen> {
   /// màn hình chính vẽ lại (trạng thái Tạm dừng / Đang khám, số hiện tại,
   /// số đang đợi, số đã khám).
   void _syncRoomState() {
+    // Bỏ tên của những số không còn nằm trong “SỐ ĐÃ CHO QUA”.
+    final soDaChoQua = <int>{
+      for (final entry in passed)
+        if (entry.deferred) entry.number,
+    };
+    _patientNameDaChoQua.removeWhere((so, _) => !soDaChoQua.contains(so));
+
     final store = RoomSessionStore.instance;
     store.sessionOf(_storeKey)
       ..started = true
@@ -573,6 +588,7 @@ class _QueueScreenState extends State<QueueScreen> {
       ..requeuedNumbers = _requeuedAppointmentNumbers.toList()
       ..appointmentIdByNumber = Map<int, String>.of(_appointmentIdByNumber)
       ..patientNameByNumber = Map<int, String>.of(_patientNameByNumber)
+      ..deferredNameByNumber = Map<int, String>.of(_patientNameDaChoQua)
       ..paused = paused
       ..examinedNumbers = <int>[
         for (final entry in passed)
@@ -1156,6 +1172,10 @@ class _QueueScreenState extends State<QueueScreen> {
       // kể cả số vừa là số hiện tại / số tiếp theo. Xoá entry cũ cùng số
       // (nếu còn sót) trước khi thêm để danh sách không bị trùng số.
       _requeuedAppointmentNumbers.remove(number);
+      // Giữ tên bệnh nhân theo đúng số lúc cho qua để dải “SỐ ĐÃ CHO QUA”
+      // vẫn hiện đúng tên sau khi các số phía sau được đánh lại.
+      final tenDaChoQua = _patientNameFor(number);
+      if (tenDaChoQua != null) _patientNameDaChoQua[number] = tenDaChoQua;
       passed.removeWhere((e) => e.number == number && e.deferred);
       passed.add((number: number, deferred: true));
       _promoteWaitingHeads();
@@ -1182,7 +1202,11 @@ class _QueueScreenState extends State<QueueScreen> {
       _syncRoomState();
     });
     _reportAppointmentOutcome(number, AppointmentOutcome.deferred);
-    notify('Số $number đã được chuyển vào “SỐ ĐÃ CHO QUA”.');
+    // Các số phía sau số bị cho qua giảm 1 để hàng chờ không bị lỗ trống
+    // (hàm tự hiện thông báo khi có số phải đổi).
+    if (!_danhSoLaiSauKhiDoi(number)) {
+      notify('Số $number đã được chuyển vào “SỐ ĐÃ CHO QUA”.');
+    }
   }
 
   /// Gọi lại một bệnh nhân đã khám xong: đưa số đó vào "SỐ HIỆN TẠI" ngay,
@@ -1479,6 +1503,34 @@ class _QueueScreenState extends State<QueueScreen> {
       if (soMoi != soCu) renumber[soCu] = soMoi;
     }
     if (renumber.isEmpty) return;
+    _apDungDanhSoLai(renumber, 'Đã đánh số lại hàng chờ');
+  }
+
+  /// Nhấn “Đợi”: các số phía sau số bị cho qua giảm 1 để lấp chỗ trống,
+  /// đúng như yêu cầu “các số phía sau số đó −1”. Số bị đợi giữ nguyên số
+  /// (đã nằm trong “SỐ ĐÃ CHO QUA” kèm tên bệnh nhân) và được ghi lại
+  /// trạng thái `7` trước khi đánh số.
+  bool _danhSoLaiSauKhiDoi(int soBiDoi) {
+    final renumber = <int, int>{};
+    for (final so in <int>[
+      if (current > 0) current,
+      if (next > 0) next,
+      ...waiting,
+    ]) {
+      if (so > soBiDoi) renumber[so] = so - 1;
+    }
+    if (renumber.isEmpty) return false;
+    _apDungDanhSoLai(
+      renumber,
+      'Số $soBiDoi đã được chuyển vào “SỐ ĐÃ CHO QUA” và đã đánh lại số',
+    );
+    return true;
+  }
+
+  /// Áp một bảng đổi số (số cũ → số mới) cho toàn bộ trạng thái hàng chờ,
+  /// cập nhật phiên phòng và ghi `so_thu_tu` mới lên Firebase.
+  void _apDungDanhSoLai(Map<int, int> renumber, String moDau) {
+    if (renumber.isEmpty) return;
 
     // Chụp mã lịch hẹn TRƯỚC khi đổi khoá các ánh xạ theo số.
     final canGhi = <(String, int)>[
@@ -1527,6 +1579,16 @@ class _QueueScreenState extends State<QueueScreen> {
       _patientNameByNumber
         ..clear()
         ..addAll(tenTheoSo);
+      // Tên trong “SỐ ĐÃ CHO QUA” đi theo số của chính nó; nếu trùng số với
+      // một số đã cho qua trước đó thì giữ tên của số đã có (số vừa đợi
+      // được ưu tiên vì đã ghi vào map trước khi đánh số lại).
+      final tenChoQua = <int, String>{};
+      for (final entry in _patientNameDaChoQua.entries) {
+        tenChoQua.putIfAbsent(doi(entry.key), () => entry.value);
+      }
+      _patientNameDaChoQua
+        ..clear()
+        ..addAll(tenChoQua);
       final vangMat = <int>{for (final so in _absentAppointmentNumbers) doi(so)};
       _absentAppointmentNumbers
         ..clear()
@@ -1538,7 +1600,9 @@ class _QueueScreenState extends State<QueueScreen> {
         ..clear()
         ..addAll(chenLai);
       if (selected != null) selected = doi(selected!);
-      if (soMoi > lastIssued) lastIssued = soMoi;
+      for (final so in renumber.values) {
+        if (so > lastIssued) lastIssued = so;
+      }
       _syncRoomState();
     });
 
@@ -1550,14 +1614,14 @@ class _QueueScreenState extends State<QueueScreen> {
 
     final ghi = widget.onRenumberAppointment;
     if (ghi == null) {
-      notify('Đã đánh số lại hàng chờ: $moTa.');
+      notify('$moDau: $moTa.');
       return;
     }
 
     for (final (appointmentId, soTheoLich) in canGhi) {
       _pendingRenumberByAppointmentId[appointmentId] = soTheoLich;
     }
-    notify('Đã đánh số lại hàng chờ và cập nhật Firebase: $moTa.');
+    notify('$moDau và cập nhật Firebase: $moTa.');
 
     var loi = 0;
     for (final (appointmentId, soTheoLich) in canGhi) {
@@ -1808,6 +1872,9 @@ class _QueueScreenState extends State<QueueScreen> {
                                                 newestDeferredNumbers[index];
                                             return _DeferredChip(
                                               number: number,
+                                              patientName:
+                                                  _patientNameDaChoQua[number] ??
+                                                  _patientNameFor(number),
                                               onTap: () => openInsertScreen(
                                                 initialNumber: number,
                                               ),
@@ -3266,15 +3333,27 @@ class _RecallChip extends StatelessWidget {
 
 /// Ô số trong hàng "SỐ ĐÃ CHO QUA": bấm để mở màn hình chèn lại số đó.
 class _DeferredChip extends StatelessWidget {
-  const _DeferredChip({required this.number, required this.onTap});
+  const _DeferredChip({
+    required this.number,
+    required this.onTap,
+    this.patientName,
+  });
 
   final int number;
+
+  /// Tên bệnh nhân của số bị cho qua (hiện ngay cạnh số để nhân viên nhận
+  /// ra ai đang đợi, kể cả khi số đã bị đánh lại).
+  final String? patientName;
+
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
-    label: 'Số $number đã bị cho qua, bấm để chèn lại',
+    label: (patientName ?? '').trim().isEmpty
+        ? 'Số $number đã bị cho qua, bấm để chèn lại'
+        : 'Số $number – ${patientName!.trim()} đã bị cho qua, '
+              'bấm để chèn lại',
     child: Container(
       height: 42,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -3313,6 +3392,22 @@ class _DeferredChip extends StatelessWidget {
                   color: _Ui.chipIdleText,
                 ),
               ),
+              if ((patientName ?? '').trim().isNotEmpty) ...[
+                const SizedBox(width: 6),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: Text(
+                    patientName!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: _Ui.chipIdleText,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

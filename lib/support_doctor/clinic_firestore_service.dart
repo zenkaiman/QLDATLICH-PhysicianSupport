@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import 'department_room_picker.dart';
 import 'queue_screen.dart';
-import 'thong_bao_benh_nhan.dart';
 
 /// Đọc danh sách khoa/phòng từ Cloud Firestore theo thời gian thực.
 ///
@@ -441,9 +440,6 @@ class ClinicFirestoreService {
   ///  - `7` Xin đợi (cho qua lượt)
   ///  - `2` Được chèn/gọi lại vào hàng chờ
   ///
-  /// Phần Bệnh nhân không cần sửa code: màn hình thông báo sẵn có của bệnh
-  /// nhân đang lắng nghe realtime đúng collection này (xem
-  /// `ThongBaoBenhNhanService`).
   Future<void> updateAppointmentStatus({
     required String appointmentId,
     required String statusId,
@@ -452,34 +448,13 @@ class ClinicFirestoreService {
         .collection(appointmentsCollection)
         .doc(appointmentId);
 
-    // Đọc dữ liệu lịch hẹn trước khi ghi để lấy định danh bệnh nhân
-    // (uid / mã bệnh nhân / số điện thoại) + số thứ tự cho thông báo.
-    Map<String, dynamic> duLieuLichHen = const <String, dynamic>{};
-    try {
-      final snap = await docRef.get();
-      final data = snap.data();
-      if (data != null) duLieuLichHen = data;
-    } catch (_) {
-      // Không đọc được thì vẫn ghi trạng thái như bình thường.
-    }
-
     await docRef.update(<String, dynamic>{
       'trang_thai_id': statusId,
       'ngay_cap_nhat': FieldValue.serverTimestamp(),
     });
-
-    // Thông báo cho bệnh nhân — lỗi mạng không được làm hỏng thao tác hàng chờ.
-    try {
-      await ThongBaoBenhNhanService.guiThongBaoTrangThaiKham(
-        lichHenId: appointmentId,
-        trangThaiId: statusId,
-        duLieuLichHen: duLieuLichHen,
-      );
-    } catch (_) {}
   }
 
-  /// Ghi số thứ tự mới của một lịch hẹn lên Firestore và báo cho bệnh
-  /// nhân biết số mới.
+  /// Ghi số thứ tự mới của một lịch hẹn lên Firestore.
   ///
   /// Dùng khi nhân viên bấm “+ Chèn”: số vừa chèn nhận `số mốc + 1` và
   /// các số phía sau tăng thêm 1, nên phải cập nhật `so_thu_tu` của mọi
@@ -493,33 +468,10 @@ class ClinicFirestoreService {
         .collection(appointmentsCollection)
         .doc(appointmentId);
 
-    // Đọc trước khi ghi để thông báo có đủ thông tin bệnh nhân/khoa/phòng.
-    Map<String, dynamic> duLieuLichHen = const <String, dynamic>{};
-    try {
-      final snapshot = await docRef.get();
-      final data = snapshot.data();
-      if (data != null) duLieuLichHen = data;
-    } catch (_) {
-      // Không đọc được thì vẫn ghi số mới như bình thường.
-    }
-
     await docRef.update(<String, dynamic>{
       'so_thu_tu': soThuTu,
       'ngay_cap_nhat': FieldValue.serverTimestamp(),
     });
-
-    // Báo bệnh nhân số mới — lỗi mạng không được làm hỏng thao tác hàng chờ.
-    try {
-      await ThongBaoBenhNhanService.guiThongBaoTrangThaiKham(
-        lichHenId: appointmentId,
-        trangThaiId: confirmedStatusId,
-        duLieuLichHen: <String, dynamic>{
-          ...duLieuLichHen,
-          'so_thu_tu': soThuTu,
-        },
-        ghiChu: 'Số thứ tự của bạn đã được cập nhật.',
-      );
-    } catch (_) {}
   }
 }
 

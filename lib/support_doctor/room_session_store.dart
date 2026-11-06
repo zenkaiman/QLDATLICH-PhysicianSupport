@@ -42,6 +42,10 @@ class RoomSessionSnapshot {
   /// theo, kể cả khi rời phòng rồi mở lại trong cùng phiên.
   Map<int, String> patientNameByNumber = <int, String>{};
 
+  /// Tên bệnh nhân của các số đang nằm trong “SỐ ĐÃ CHO QUA”, giữ theo
+  /// số lúc bấm “Đợi” (số này không đổi khi các số phía sau được đánh lại).
+  Map<int, String> deferredNameByNumber = <int, String>{};
+
   /// STT lớn nhất đã biết từ danh sách lịch hẹn/phiên; không dùng để
   /// tự sinh thêm số bệnh nhân.
   int lastIssued = 0;
