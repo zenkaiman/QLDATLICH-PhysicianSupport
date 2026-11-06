@@ -46,6 +46,11 @@ class RoomSessionSnapshot {
   /// số lúc bấm “Đợi” (số này không đổi khi các số phía sau được đánh lại).
   Map<int, String> deferredNameByNumber = <int, String>{};
 
+  /// Mã lịch hẹn của từng số trong “SỐ ĐÃ CHO QUA”, chốt lúc bấm “Đợi”.
+  /// Cần khôi phục cùng phiên để khi mở lại phòng vẫn chèn lại đúng người
+  /// (dùng số hiển thị làm khoá sẽ bị trùng với người đang chạy).
+  Map<int, String> deferredAppointmentIdByNumber = <int, String>{};
+
   /// STT lớn nhất đã biết từ danh sách lịch hẹn/phiên; không dùng để
   /// tự sinh thêm số bệnh nhân.
   int lastIssued = 0;

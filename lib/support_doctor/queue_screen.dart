@@ -528,6 +528,9 @@ class _QueueScreenState extends State<QueueScreen> {
       _patientNameDaChoQua
         ..clear()
         ..addAll(snapshot.deferredNameByNumber);
+      _maLichHenDaChoQua
+        ..clear()
+        ..addAll(snapshot.deferredAppointmentIdByNumber);
       paused = snapshot.paused;
     } else {
       // Lần đầu mở phòng: KHÔNG tự sinh số thứ tự.
@@ -595,6 +598,9 @@ class _QueueScreenState extends State<QueueScreen> {
       ..appointmentIdByNumber = Map<int, String>.of(_appointmentIdByNumber)
       ..patientNameByNumber = Map<int, String>.of(_patientNameByNumber)
       ..deferredNameByNumber = Map<int, String>.of(_patientNameDaChoQua)
+      ..deferredAppointmentIdByNumber = Map<int, String>.of(
+        _maLichHenDaChoQua,
+      )
       ..paused = paused
       ..examinedNumbers = <int>[
         for (final entry in passed)
@@ -766,6 +772,23 @@ class _QueueScreenState extends State<QueueScreen> {
             'Không cập nhật được trạng thái lịch hẹn của số $number '
             'lên Firebase.',
           );
+        }
+      }),
+    );
+  }
+
+  /// Báo kết quả cho một lịch hẹn theo mã (dùng khi số thứ tự vừa đổi
+  /// nên không thể tra ngược từ số nữa).
+  void _reportAppointmentOutcomeById(
+    String appointmentId,
+    AppointmentOutcome outcome,
+  ) {
+    final report = widget.onAppointmentOutcome;
+    if (report == null) return;
+    unawaited(
+      report(appointmentId, outcome).catchError((Object error) {
+        if (mounted) {
+          notify('Không cập nhật được trạng thái lịch hẹn lên Firebase.');
         }
       }),
     );
@@ -1472,15 +1495,15 @@ class _QueueScreenState extends State<QueueScreen> {
       // gắn đúng mã lịch hẹn + tên đã chốt lúc bấm “Đợi”.
       final immediateForQueue = <InsertResult>[];
       for (final insert in immediateResults) {
-        final maLichHen = _maLichHenDaChoQua[insert.number];
-        if (maLichHen == null) {
-          // Không rõ mã lịch hẹn (dữ liệu cũ): giữ nguyên hành vi trước đây.
-          immediateForQueue.add(insert);
-          continue;
-        }
+        // LUÔN dùng số tạm âm cho người vừa chèn: số hiển thị cũ của họ có
+        // thể trùng với số của một người khác đang chạy, nếu đưa thẳng số
+        // đó vào hàng chờ thì phép đánh số sẽ đổi nhầm người.
         final soTam = soTamKeTiep;
         soTamKeTiep -= 1;
-        _appointmentIdByNumber[soTam] = maLichHen;
+        final maLichHen = _maLichHenDaChoQua[insert.number];
+        if (maLichHen != null) {
+          _appointmentIdByNumber[soTam] = maLichHen;
+        }
         final ten =
             _patientNameDaChoQua[insert.number] ??
             _patientNameByNumber[insert.number];
@@ -1542,12 +1565,19 @@ class _QueueScreenState extends State<QueueScreen> {
       message = sentences.join('\n');
       _syncRoomState();
     });
-    for (final number in immediateNumbersToReport) {
-      _reportAppointmentOutcome(number, AppointmentOutcome.requeued);
-    }
+    // Chốt mã lịch hẹn của người vừa chèn TRƯỚC khi đánh số lại (sau đó
+    // khoá ánh xạ đã đổi sang số mới).
+    final canBaoTrangThai = <String>[
+      for (final number in immediateNumbersToReport)
+        if (_appointmentIdByNumber[number] case final appointmentId?)
+          appointmentId,
+    ];
     // Đánh số lại sau khi chèn: số vừa chèn nhận số mốc + 1, các số phía
     // sau tăng thêm 1 và được ghi lên Firebase.
     _danhSoLaiSauKhiChen();
+    for (final appointmentId in canBaoTrangThai) {
+      _reportAppointmentOutcomeById(appointmentId, AppointmentOutcome.requeued);
+    }
   }
 
   /// Đánh số lại hàng chờ sau khi chèn số và ghi số mới lên Firebase.
