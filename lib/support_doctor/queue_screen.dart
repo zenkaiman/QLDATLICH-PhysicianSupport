@@ -1585,6 +1585,23 @@ class _QueueScreenState extends State<QueueScreen> {
 
     int doi(int so) => renumber[so] ?? so;
 
+    // Chặn trước khi áp dụng: nếu bảng đổi số làm hai vị trí khác nhau ra
+    // cùng một số thì huỷ thao tác, giữ nguyên hàng chờ hiện tại thay vì
+    // để màn hình rơi vào trạng thái trùng số (nguồn gốc lỗi “số nhảy”).
+    final truocKhiDoi = <int>{
+      if (current > 0) current,
+      if (next > 0) next,
+      ...waiting.where((so) => so != 0),
+    };
+    final sauKhiDoi = <int>{for (final so in truocKhiDoi) doi(so)};
+    if (sauKhiDoi.length != truocKhiDoi.length) {
+      notify(
+        'Chưa đánh số lại được vì sẽ tạo số trùng. '
+        'Bấm “Đặt lại số” để nạp lại hàng chờ rồi thao tác lại.',
+      );
+      return;
+    }
+
     setState(() {
       // Số đang khám cũng phải đổi theo: khi bệnh nhân đang khám xin đợi,
       // người kế tiếp lên khám và nhận đúng số mới (vd 2 → 1).
