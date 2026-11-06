@@ -438,6 +438,11 @@ class _QueueScreenState extends State<QueueScreen> {
   /// phía sau đã được đánh lại (−1) và trùng số.
   final Map<int, String> _patientNameDaChoQua = <int, String>{};
 
+  /// Mã lịch hẹn của từng số đang nằm trong “SỐ ĐÃ CHO QUA”, chốt ngay
+  /// lúc bấm “Đợi” — số hiển thị có thể trùng với số của người khác đang
+  /// chạy, nên khi chèn lại phải dùng đúng mã lịch hẹn này.
+  final Map<int, String> _maLichHenDaChoQua = <int, String>{};
+
   /// Ánh xạ tạm mã lịch hẹn → số thứ tự MỚI vừa ghi sau khi chèn số.
   /// Luồng Firebase còn trả số cũ trong vài giây; ánh xạ này giữ nguyên
   /// số mới trên màn hình cho tới khi document trả về đúng số đó.
@@ -576,6 +581,7 @@ class _QueueScreenState extends State<QueueScreen> {
         if (entry.deferred) entry.number,
     };
     _patientNameDaChoQua.removeWhere((so, _) => !soDaChoQua.contains(so));
+    _maLichHenDaChoQua.removeWhere((so, _) => !soDaChoQua.contains(so));
 
     final store = RoomSessionStore.instance;
     store.sessionOf(_storeKey)
@@ -1176,6 +1182,10 @@ class _QueueScreenState extends State<QueueScreen> {
       // vẫn hiện đúng tên sau khi các số phía sau được đánh lại.
       final tenDaChoQua = _patientNameFor(number);
       if (tenDaChoQua != null) _patientNameDaChoQua[number] = tenDaChoQua;
+      final maLichHenDaChoQua = _appointmentIdByNumber[number];
+      if (maLichHenDaChoQua != null) {
+        _maLichHenDaChoQua[number] = maLichHenDaChoQua;
+      }
       passed.removeWhere((e) => e.number == number && e.deferred);
       passed.add((number: number, deferred: true));
       _promoteWaitingHeads();
@@ -1417,6 +1427,11 @@ class _QueueScreenState extends State<QueueScreen> {
     );
     if (!mounted || results == null || results.isEmpty) return;
     final immediateNumbersToReport = <int>{};
+    // Bộ đếm "số tạm" âm: số trong hàng chờ luôn dương, nên số tạm không
+    // bao giờ trùng với bất kỳ ai đang chạy (kể cả khi số hiển thị của
+    // người đã đợi trùng số với người khác). Sau bước đánh số lại, số tạm
+    // được thay bằng số thật đúng vị trí chèn.
+    var soTamKeTiep = -1;
     setState(() {
       // Tách yêu cầu chèn ngay khỏi yêu cầu chờ số mốc tương lai, dựa trên
       // [lastIssued] tại thời điểm đóng màn hình chèn.
@@ -1427,10 +1442,31 @@ class _QueueScreenState extends State<QueueScreen> {
           .where((r) => _isFutureScheduledInsert(r, lastIssued))
           .toList();
       final before = List<int>.of(waiting);
+      // Đổi số hiển thị của người được chèn sang "số tạm" âm, đồng thời
+      // gắn đúng mã lịch hẹn + tên đã chốt lúc bấm “Đợi”.
+      final immediateForQueue = <InsertResult>[];
+      for (final insert in immediateResults) {
+        final maLichHen = _maLichHenDaChoQua[insert.number];
+        if (maLichHen == null) {
+          // Không rõ mã lịch hẹn (dữ liệu cũ): giữ nguyên hành vi trước đây.
+          immediateForQueue.add(insert);
+          continue;
+        }
+        final soTam = soTamKeTiep;
+        soTamKeTiep -= 1;
+        _appointmentIdByNumber[soTam] = maLichHen;
+        final ten =
+            _patientNameDaChoQua[insert.number] ??
+            _patientNameByNumber[insert.number];
+        if (ten != null && ten.trim().isNotEmpty) {
+          _patientNameByNumber[soTam] = ten.trim();
+        }
+        immediateForQueue.add((number: soTam, afterNumber: insert.afterNumber));
+      }
       // Chèn ngay: dựng lại hàng chờ trong một lượt theo các số mốc gốc.
       waiting = _waitingAfterInserts(
         before,
-        immediateResults,
+        immediateForQueue,
         nextNumber: next,
       );
       // Chờ mốc tương lai: giữ lịch; đợt cập nhật lịch hẹn sau sẽ tự đặt
@@ -1446,14 +1482,20 @@ class _QueueScreenState extends State<QueueScreen> {
       passed.removeWhere(
         (entry) => entry.deferred && insertedNumbers.contains(entry.number),
       );
+      for (final number in insertedNumbers) {
+        _patientNameDaChoQua.remove(number);
+        _maLichHenDaChoQua.remove(number);
+      }
       // Số chèn ngay được giữ tạm trong hàng chờ và sẽ báo về trạng
       // thái `2` ngay sau setState. Số chờ mốc tương lai vẫn giữ `7`
       // cho tới khi thực sự được đặt vào hàng chờ ở một đợt đồng bộ sau.
-      _requeuedAppointmentNumbers.addAll(immediateResults.map((r) => r.number));
-      immediateNumbersToReport.addAll(immediateResults.map((r) => r.number));
-      selected = immediateResults.isEmpty
+      _requeuedAppointmentNumbers
+        ..removeAll(insertedNumbers)
+        ..addAll(immediateForQueue.map((r) => r.number));
+      immediateNumbersToReport.addAll(immediateForQueue.map((r) => r.number));
+      selected = immediateForQueue.isEmpty
           ? null
-          : immediateResults.first.number;
+          : immediateForQueue.first.number;
       final immediateDetails = <String>[
         for (final r in immediateResults)
           r.afterNumber == null
@@ -1489,10 +1531,12 @@ class _QueueScreenState extends State<QueueScreen> {
   /// đúng thứ tự gọi — nên số vừa chèn ngay sau số mốc nhận
   /// `số mốc + 1` và mọi số phía sau tăng thêm 1.
   void _danhSoLaiSauKhiChen() {
-    // Thứ tự gọi của các số CHƯA khám (mỗi số chỉ tính một lần).
+    // Thứ tự gọi của các số CHƯA khám (mỗi vị trí chỉ tính một lần).
+    // Số tạm âm của người vừa chèn cũng nằm trong danh sách và sẽ được
+    // đổi thành số thật ở vòng lặp bên dưới.
     final order = <int>[];
     for (final so in <int>[if (next > 0) next, ...waiting]) {
-      if (so > 0 && !order.contains(so)) order.add(so);
+      if (so != 0 && !order.contains(so)) order.add(so);
     }
     if (order.isEmpty) return;
 
