@@ -755,6 +755,12 @@ class _QueueScreenState extends State<QueueScreen> {
     for (final number in newlyRequeuedNumbers) {
       _reportAppointmentOutcome(number, AppointmentOutcome.requeued);
     }
+    // Đồng bộ xong thì chạy lại danh sách số: nếu dữ liệu trên Firebase bị
+    // lỗ số / trùng số, màn hình tự sửa về dãy 1, 2, 3, … n.
+    // Chỉ làm khi không còn đợt đánh số nào đang chờ ghi để tránh ghi đè nhau.
+    if (_pendingRenumberByAppointmentId.isEmpty) {
+      _chayLaiDanhSachSo(imLang: true);
+    }
   }
 
   /// Báo kết quả của một số về lịch hẹn tương ứng, nếu có ánh xạ.
@@ -923,6 +929,8 @@ class _QueueScreenState extends State<QueueScreen> {
     if (shouldReportExamined) {
       _reportAppointmentOutcome(finished, AppointmentOutcome.examined);
     }
+    // Chạy lại danh sách số sau khi chuyển sang số kế tiếp.
+    _chayLaiDanhSachSo(imLang: true);
   }
 
   /// “Đặt lại số” trong chế độ lịch hẹn: xoá trạng thái phiên trên máy
@@ -1065,6 +1073,8 @@ class _QueueScreenState extends State<QueueScreen> {
       _syncRoomState();
     });
     _reportAppointmentOutcome(absentNumber, AppointmentOutcome.absent);
+    // Chạy lại danh sách số sau khi bỏ một số khỏi hàng chờ.
+    _chayLaiDanhSachSo(imLang: true);
   }
 
   /// Bảng chọn số cần ghi nhận vắng mặt – chỉ gồm các số đã bấm "Đợi".
@@ -1238,7 +1248,9 @@ class _QueueScreenState extends State<QueueScreen> {
     _reportAppointmentOutcome(number, AppointmentOutcome.deferred);
     // Các số phía sau số bị cho qua giảm 1 để hàng chờ không bị lỗ trống
     // (hàm tự hiện thông báo khi có số phải đổi).
-    if (!_danhSoLaiSauKhiDoi(number, daDoiSoDangKham: isCurrent)) {
+    if (!_chayLaiDanhSachSo(
+      moDau: 'Số $number đã vào “SỐ ĐÃ CHO QUA” và đã đánh lại số',
+    )) {
       notify('Số $number đã được chuyển vào “SỐ ĐÃ CHO QUA”.');
     }
   }
@@ -1572,76 +1584,74 @@ class _QueueScreenState extends State<QueueScreen> {
         if (_appointmentIdByNumber[number] case final appointmentId?)
           appointmentId,
     ];
-    // Đánh số lại sau khi chèn: số vừa chèn nhận số mốc + 1, các số phía
-    // sau tăng thêm 1 và được ghi lên Firebase.
-    _danhSoLaiSauKhiChen();
+    // Chạy lại danh sách số sau khi chèn: số vừa chèn nhận số mốc + 1,
+    // các số phía sau tăng thêm 1 và được ghi lên Firebase.
+    _chayLaiDanhSachSo(moDau: 'Đã đánh số lại hàng chờ');
     for (final appointmentId in canBaoTrangThai) {
       _reportAppointmentOutcomeById(appointmentId, AppointmentOutcome.requeued);
     }
   }
 
-  /// Đánh số lại hàng chờ sau khi chèn số và ghi số mới lên Firebase.
+  /// Chạy lại TOÀN BỘ danh sách số sau mỗi thao tác (Tiếp theo, Đợi, Chèn,
+  /// Vắng mặt, đồng bộ Firebase):
+  ///  1. dọn số trùng / số không hợp lệ trong (đang khám, tiếp theo, hàng chờ);
+  ///  2. lấy số nền là số lớn nhất đã khám xong (các số này không đổi);
+  ///  3. đánh lại liên tiếp theo đúng thứ tự gọi;
+  ///  4. ghi `so_thu_tu` mới lên Firebase cho ai bị đổi.
   ///
-  /// Số đang khám ([current]) và các số đã khám/đã cho qua giữ nguyên.
-  /// Các số còn chờ được đánh liên tiếp, bắt đầu từ `current + 1`, theo
-  /// đúng thứ tự gọi — nên số vừa chèn ngay sau số mốc nhận
-  /// `số mốc + 1` và mọi số phía sau tăng thêm 1.
-  void _danhSoLaiSauKhiChen() {
-    // Thứ tự gọi của các số CHƯA khám (mỗi vị trí chỉ tính một lần).
-    // Số tạm âm của người vừa chèn cũng nằm trong danh sách và sẽ được
-    // đổi thành số thật ở vòng lặp bên dưới.
-    final order = <int>[];
-    for (final so in <int>[if (next > 0) next, ...waiting]) {
-      if (so != 0 && !order.contains(so)) order.add(so);
-    }
-    if (order.isEmpty) return;
+  /// Nhờ vậy mọi thao tác đều "tự lành": dù trước đó dữ liệu có lỗi, lỗ số
+  /// hay trùng số thì sau khi bấm là dãy về đúng 1, 2, 3, … n.
+  bool _chayLaiDanhSachSo({String? moDau, bool imLang = false}) {
+    if (!mounted) return false;
 
-    final renumber = <int, int>{};
-    var soMoi = current > 0 ? current : 0;
-    for (final soCu in order) {
-      soMoi += 1;
-      if (soMoi != soCu) renumber[soCu] = soMoi;
+    // 1) Dọn trùng: mỗi số chỉ được nằm ở một vị trí.
+    final daDung = <int>{};
+    if (current > 0) daDung.add(current);
+    if (next > 0 && !daDung.add(next)) next = 0;
+    final waitingMoi = <int>[];
+    for (final so in waiting) {
+      if (so <= 0) continue;
+      if (!daDung.add(so)) continue;
+      waitingMoi.add(so);
     }
-    if (renumber.isEmpty) return;
-    _apDungDanhSoLai(renumber, 'Đã đánh số lại hàng chờ');
-  }
+    var canVeLai = waitingMoi.length != waiting.length;
+    if (!canVeLai) {
+      for (var i = 0; i < waitingMoi.length; i++) {
+        if (waitingMoi[i] != waiting[i]) {
+          canVeLai = true;
+          break;
+        }
+      }
+    }
+    waiting = waitingMoi;
 
-  /// Nhấn “Đợi”: đánh lại số cho phần còn chạy để dãy luôn liền mạch
-  /// `1, 2, 3, … n` (mọi số phía sau số bị cho qua đều −1).
-  ///
-  /// - Nếu chính số đang khám bị cho qua: người kế tiếp lên khám và nhận
-  ///   đúng số vừa trống, các số còn lại nối tiếp nhau.
-  /// - Nếu số bị cho qua nằm trong “số tiếp theo”/hàng chờ: giữ nguyên số
-  ///   đang khám, các số phía sau dồn lên lấp chỗ trống.
-  ///
-  /// Cách làm là NÉN cả dãy theo đúng thứ tự gọi thay vì trừ 1 từng số, nên
-  /// nếu dữ liệu Firebase đang có lỗ số thì lần thao tác này cũng dọn luôn.
-  bool _danhSoLaiSauKhiDoi(int soBiDoi, {required bool daDoiSoDangKham}) {
-    // Thứ tự gọi sau khi cho qua (mỗi vị trí một lần).
-    final order = <int>[];
-    for (final so in <int>[
-      if (daDoiSoDangKham && current > 0) current,
+    // 2) Số nền: số lớn nhất đã khám xong.
+    var soMoi = 0;
+    for (final entry in passed) {
+      if (!entry.deferred && entry.number > soMoi) soMoi = entry.number;
+    }
+
+    // 3) Đánh lại theo đúng thứ tự gọi.
+    final order = <int>[
+      if (current > 0) current,
       if (next > 0) next,
       ...waiting,
-    ]) {
-      if (so != 0 && !order.contains(so)) order.add(so);
-    }
-    if (order.isEmpty) return false;
-
-    // Số cuối cùng được coi là "đã dùng": nếu số đang khám vừa bị cho qua
-    // thì lùi về ngay trước số đó, ngược lại giữ nguyên số đang khám.
-    var soMoi = daDoiSoDangKham ? soBiDoi - 1 : (current > 0 ? current : 0);
-    if (soMoi < 0) soMoi = 0;
-
+    ];
     final renumber = <int, int>{};
-    for (final soCu in order) {
+    for (final so in order) {
       soMoi += 1;
-      if (soMoi != soCu) renumber[soCu] = soMoi;
+      if (soMoi != so) renumber[so] = soMoi;
     }
-    if (renumber.isEmpty) return false;
+
+    if (renumber.isEmpty) {
+      if (canVeLai) setState(() {});
+      _syncRoomState();
+      return false;
+    }
     _apDungDanhSoLai(
       renumber,
-      'Số $soBiDoi đã vào “SỐ ĐÃ CHO QUA” và đã đánh lại số',
+      moDau ?? 'Đã đánh lại số thứ tự',
+      imLang: imLang,
     );
     return true;
   }
@@ -1664,7 +1674,11 @@ class _QueueScreenState extends State<QueueScreen> {
 
   /// Áp một bảng đổi số (số cũ → số mới) cho toàn bộ trạng thái hàng chờ,
   /// cập nhật phiên phòng và ghi `so_thu_tu` mới lên Firebase.
-  void _apDungDanhSoLai(Map<int, int> renumber, String moDau) {
+  void _apDungDanhSoLai(
+    Map<int, int> renumber,
+    String moDau, {
+    bool imLang = false,
+  }) {
     if (renumber.isEmpty) return;
 
     // Chụp mã lịch hẹn TRƯỚC khi đổi khoá các ánh xạ theo số.
@@ -1769,14 +1783,14 @@ class _QueueScreenState extends State<QueueScreen> {
 
     final ghi = widget.onRenumberAppointment;
     if (ghi == null) {
-      notify('$moDau: $moTa.');
+      if (!imLang) notify('$moDau: $moTa.');
       return;
     }
 
     for (final (appointmentId, soTheoLich) in canGhi) {
       _pendingRenumberByAppointmentId[appointmentId] = soTheoLich;
     }
-    notify('$moDau và cập nhật Firebase: $moTa.');
+    if (!imLang) notify('$moDau và cập nhật Firebase: $moTa.');
 
     var loi = 0;
     for (final (appointmentId, soTheoLich) in canGhi) {
