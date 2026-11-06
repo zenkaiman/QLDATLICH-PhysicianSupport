@@ -1156,6 +1156,7 @@ class _QueueScreenState extends State<QueueScreen> {
       return;
     }
     setState(() {
+      _donSoTrung();
       // LƯU LỊCH SỬ: mọi số vừa bấm "Đợi" đều được ghi lại để dùng cho
       // việc khác, dù sau đó số đó có được gọi lại hay xác nhận vắng mặt.
       if (!_deferredHistory.contains(number)) {
@@ -1214,7 +1215,7 @@ class _QueueScreenState extends State<QueueScreen> {
     _reportAppointmentOutcome(number, AppointmentOutcome.deferred);
     // Các số phía sau số bị cho qua giảm 1 để hàng chờ không bị lỗ trống
     // (hàm tự hiện thông báo khi có số phải đổi).
-    if (!_danhSoLaiSauKhiDoi(number)) {
+    if (!_danhSoLaiSauKhiDoi(number, daDoiSoDangKham: isCurrent)) {
       notify('Số $number đã được chuyển vào “SỐ ĐÃ CHO QUA”.');
     }
   }
@@ -1426,6 +1427,29 @@ class _QueueScreenState extends State<QueueScreen> {
       ),
     );
     if (!mounted || results == null || results.isEmpty) return;
+
+    // Số mốc phải còn trong lượt gọi (đang khám / số tiếp theo / hàng chờ).
+    // Nếu không, báo để chọn lại thay vì tự đoán chỗ chèn — đây chính là
+    // nguyên nhân bệnh nhân bị đẩy lên trước hàng chờ.
+    final soMocHopLe = <int>{
+      0,
+      if (current > 0) current,
+      if (next > 0) next,
+      ...waiting,
+    };
+    for (final insert in results) {
+      final after = insert.afterNumber;
+      if (after == null || after == 0) continue;
+      if (_isFutureScheduledInsert(insert, lastIssued)) continue;
+      if (!soMocHopLe.contains(after)) {
+        notify(
+          'Số mốc $after không còn trong hàng chờ. '
+          'Chọn số khác hoặc nhập 0 để chèn lên đầu.',
+        );
+        return;
+      }
+    }
+
     final immediateNumbersToReport = <int>{};
     // Bộ đếm "số tạm" âm: số trong hàng chờ luôn dương, nên số tạm không
     // bao giờ trùng với bất kỳ ai đang chạy (kể cả khi số hiển thị của
@@ -1433,6 +1457,8 @@ class _QueueScreenState extends State<QueueScreen> {
     // được thay bằng số thật đúng vị trí chèn.
     var soTamKeTiep = -1;
     setState(() {
+      // Dọn số trùng trước khi tính vị trí để phép đánh số không bị lệch.
+      _donSoTrung();
       // Tách yêu cầu chèn ngay khỏi yêu cầu chờ số mốc tương lai, dựa trên
       // [lastIssued] tại thời điểm đóng màn hình chèn.
       final immediateResults = results
@@ -1550,25 +1576,60 @@ class _QueueScreenState extends State<QueueScreen> {
     _apDungDanhSoLai(renumber, 'Đã đánh số lại hàng chờ');
   }
 
-  /// Nhấn “Đợi”: các số phía sau số bị cho qua giảm 1 để lấp chỗ trống,
-  /// đúng như yêu cầu “các số phía sau số đó −1”. Số bị đợi giữ nguyên số
-  /// (đã nằm trong “SỐ ĐÃ CHO QUA” kèm tên bệnh nhân) và được ghi lại
-  /// trạng thái `7` trước khi đánh số.
-  bool _danhSoLaiSauKhiDoi(int soBiDoi) {
-    final renumber = <int, int>{};
+  /// Nhấn “Đợi”: đánh lại số cho phần còn chạy để dãy luôn liền mạch
+  /// `1, 2, 3, … n` (mọi số phía sau số bị cho qua đều −1).
+  ///
+  /// - Nếu chính số đang khám bị cho qua: người kế tiếp lên khám và nhận
+  ///   đúng số vừa trống, các số còn lại nối tiếp nhau.
+  /// - Nếu số bị cho qua nằm trong “số tiếp theo”/hàng chờ: giữ nguyên số
+  ///   đang khám, các số phía sau dồn lên lấp chỗ trống.
+  ///
+  /// Cách làm là NÉN cả dãy theo đúng thứ tự gọi thay vì trừ 1 từng số, nên
+  /// nếu dữ liệu Firebase đang có lỗ số thì lần thao tác này cũng dọn luôn.
+  bool _danhSoLaiSauKhiDoi(int soBiDoi, {required bool daDoiSoDangKham}) {
+    // Thứ tự gọi sau khi cho qua (mỗi vị trí một lần).
+    final order = <int>[];
     for (final so in <int>[
-      if (current > 0) current,
+      if (daDoiSoDangKham && current > 0) current,
       if (next > 0) next,
       ...waiting,
     ]) {
-      if (so > soBiDoi) renumber[so] = so - 1;
+      if (so != 0 && !order.contains(so)) order.add(so);
+    }
+    if (order.isEmpty) return false;
+
+    // Số cuối cùng được coi là "đã dùng": nếu số đang khám vừa bị cho qua
+    // thì lùi về ngay trước số đó, ngược lại giữ nguyên số đang khám.
+    var soMoi = daDoiSoDangKham ? soBiDoi - 1 : (current > 0 ? current : 0);
+    if (soMoi < 0) soMoi = 0;
+
+    final renumber = <int, int>{};
+    for (final soCu in order) {
+      soMoi += 1;
+      if (soMoi != soCu) renumber[soCu] = soMoi;
     }
     if (renumber.isEmpty) return false;
     _apDungDanhSoLai(
       renumber,
-      'Số $soBiDoi đã được chuyển vào “SỐ ĐÃ CHO QUA” và đã đánh lại số',
+      'Số $soBiDoi đã vào “SỐ ĐÃ CHO QUA” và đã đánh lại số',
     );
     return true;
+  }
+
+  /// Dọn số trùng trong trạng thái hiện tại (mỗi số chỉ xuất hiện một lần
+  /// ở “đang khám” / “số tiếp theo” / hàng chờ). Chạy đầu mỗi thao tác để
+  /// dữ liệu cũ bị lỗi không làm lệch phép đánh số.
+  void _donSoTrung() {
+    final daDung = <int>{};
+    if (current > 0) daDung.add(current);
+    if (next > 0 && !daDung.add(next)) next = 0;
+    final waitingMoi = <int>[];
+    for (final so in waiting) {
+      if (so <= 0) continue;
+      if (!daDung.add(so)) continue;
+      waitingMoi.add(so);
+    }
+    waiting = waitingMoi;
   }
 
   /// Áp một bảng đổi số (số cũ → số mới) cho toàn bộ trạng thái hàng chờ,
