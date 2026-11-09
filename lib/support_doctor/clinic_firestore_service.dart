@@ -779,7 +779,8 @@ String clinicRoomDepartmentId(Map<String, Object?> data) =>
 /// Dùng [readClinicRoomStatus] để lấy toàn bộ 4 field
 /// `trang_thai_id` / `trangThaiId` / `trang_thai` / `trangThai`, sau đó
 /// trả id đã đối chiếu theo thứ tự ưu tiên: **field số → mã chuỗi**.
-/// Chấp nhận số, chuỗi số (`"12"`) và mã chuỗi (`"dang_kham"`).
+/// Chấp nhận số, chuỗi số (`"12"`) và mã chuỗi (`"kham"`,
+/// `"tam_dung"`, `"dong"`; vẫn đọc alias cũ như `"dang_kham"`).
 /// Trả về `null` khi không có field hợp lệ — lúc đó app dùng trạng thái
 /// phiên local như cũ.
 int? clinicRoomStatusId(Map<String, Object?> data) =>

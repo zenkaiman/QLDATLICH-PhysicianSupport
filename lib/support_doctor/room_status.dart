@@ -50,21 +50,27 @@ const List<String> kRoomStatusFieldVariants = <String>[
   'trangThai',
 ];
 
-/// Mã chuỗi ghi vào `trang_thai` tương ứng với từng id.
-/// 13 = `dang_kham` theo dữ liệu Firebase Console; 12/14 dùng cùng quy ước.
+/// Mã chuỗi CHUẨN ghi vào `trang_thai` theo đúng 3 từ đã chốt:
+/// `12 → tam_dung`, `13 → kham`, `14 → dong`.
+/// Document cũ dùng `dang_kham` vẫn đọc được nhờ alias bên dưới.
 const Map<int, String> kRoomStatusCodes = <int, String>{
-  kRoomStatusPausedId: 'tam_dung_kham',
-  kRoomStatusOpenId: 'dang_kham',
-  kRoomStatusClosedId: 'dong_phong_kham',
+  kRoomStatusPausedId: 'tam_dung',
+  kRoomStatusOpenId: 'kham',
+  kRoomStatusClosedId: 'dong',
 };
 
-/// Ánh xạ ngược mã chuỗi → id. Có thêm alias để đọc được dữ liệu cũ
-/// đặt tên ngắn hơn; khi GHI vẫn dùng đúng [kRoomStatusCodes].
+/// Ánh xạ ngược mã chuỗi → id.
+///
+/// 3 mã chuẩn mới đứng đầu; các mã dài/ngắn cũ vẫn được giữ để ĐỌC dữ
+/// liệu Firestore hiện có. Khi GHI luôn dùng [kRoomStatusCodes].
 const Map<String, int> kRoomStatusIdsByCode = <String, int>{
+  'tam_dung': kRoomStatusPausedId,
+  'kham': kRoomStatusOpenId,
+  'dong': kRoomStatusClosedId,
+  // Alias dữ liệu cũ.
   'tam_dung_kham': kRoomStatusPausedId,
   'dang_kham': kRoomStatusOpenId,
   'dong_phong_kham': kRoomStatusClosedId,
-  'tam_dung': kRoomStatusPausedId,
   'dong_phong': kRoomStatusClosedId,
   'da_dong': kRoomStatusClosedId,
 };

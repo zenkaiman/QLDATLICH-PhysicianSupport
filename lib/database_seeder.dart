@@ -12,9 +12,10 @@ class DatabaseSeeder {
   /// Bổ sung/cập nhật trạng thái cho `PhongKham/{roomId}`.
   ///
   /// Ghi đúng 2 field snake_case như luồng bấm nút:
-  /// `trang_thai_id` = 12/13/14 và `trang_thai` = mã chuỗi tương ứng.
-  /// Không ghi `trangThaiId` / `trangThai`. `set(merge: true)` giữ nguyên
-  /// các field như `hospitalId`, `khoaId`, `ten_phong`.
+  /// `trang_thai_id` = 12/13/14 và `trang_thai` = `tam_dung` / `kham` /
+  /// `dong` tương ứng. Không ghi `trangThaiId` / `trangThai`.
+  /// `set(merge: true)` giữ nguyên các field như `hospitalId`, `khoaId`,
+  /// `ten_phong`.
   static Future<void> seedRoomStatusId({
     required String roomId,
     int statusId = kRoomStatusDefaultId,
