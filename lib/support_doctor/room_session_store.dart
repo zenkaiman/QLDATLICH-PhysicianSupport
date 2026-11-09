@@ -84,6 +84,14 @@ class RoomSessionSnapshot {
   /// Bác sĩ đang tạm dừng khám.
   bool paused = false;
 
+  /// Mốc thời gian (giờ MÁY) được chụp ở lần bấm "Tạm dừng khám" hoặc
+  /// "Tiếp tục khám" gần nhất. Giờ này KHÔNG chạy liên tục: nó đứng yên
+  /// cho đến lần bấm tiếp theo, và được giữ lại khi rồi mở lại phòng.
+  DateTime? statusChangedAt;
+
+  /// Nhãn đi kèm mốc giờ: "Tạm dừng lúc" / "Tiếp tục lúc".
+  String statusChangeLabel = '';
+
   /// Trạng thái phòng: chỉ "Tạm dừng" khi bác sĩ đã nhấn nút "Tạm dừng khám".
   RoomRuntimeStatus get status =>
       paused ? RoomRuntimeStatus.paused : RoomRuntimeStatus.open;
