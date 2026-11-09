@@ -144,11 +144,13 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Thông báo từ Bác sĩ — chạy realtime trên máy</h1>
+    <h1>Thông báo từ Bác sĩ — giờ chụp lúc bấm nút</h1>
     <p class="sub">
       Bản xem trước của thẻ trong <code>lib/support_doctor/queue_screen.dart</code>.
-      Đồng hồ lấy <b>giờ địa phương của máy bạn</b> và tự nhảy mỗi giây; nội dung thẻ đổi
-      ngay khi có sự kiện lịch hẹn (mô phỏng tại chỗ, không cần Firebase).
+      <b>Không có đồng hồ chạy liên tục</b>: thời gian chỉ được chụp từ
+      <b>giờ địa phương của máy bạn</b> khi bấm <b>Tạm dừng khám</b> hoặc
+      <b>Tiếp tục khám</b>, rồi đứng yên cho đến lần bấm tiếp theo. Nội dung thẻ vẫn đổi
+      theo sự kiện lịch hẹn realtime (mô phỏng tại chỗ, không cần Firebase).
     </p>
 
     <div class="banner" id="banner">
@@ -159,7 +161,7 @@
 STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.</div>
         <div class="banner-footer">
           <span class="bullet"></span>
-          <span id="footer">HH001 · Khoa Hô hấp · <span class="clock">--:--:--</span> · Realtime</span>
+          <span id="footer">HH001 · Khoa Hô hấp · Realtime</span>
         </div>
       </div>
     </div>
@@ -195,6 +197,10 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       feed: 'live',          // live | connecting | error | local
       auto: true,
       showDate: false,
+      // Mốc giờ CHỈ được chụp khi bấm Tạm dừng / Tiếp tục khám.
+      lastActionAt: null,    // Date | null
+      lastActionLabel: '',   // 'Tạm dừng lúc' | 'Tiếp tục lúc'
+      actionMessage: null,   // lời nhắn kèm mốc giờ, giữ nguyên đến lần bấm sau
     };
 
     const $ = (id) => document.getElementById(id);
@@ -231,6 +237,9 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
     }
 
     function statusMessage() {
+      // Lời nhắn kèm mốc giờ được chốt lúc bấm nút và đứng yên cho đến
+      // lần bấm tiếp theo — không bị ghi đè bởi đồng hồ hay sự kiện STT.
+      if (state.actionMessage) return state.actionMessage;
       if (state.paused) return pauseMessage;
       if (state.current <= 0) {
         if (state.waiting.length) {
@@ -256,12 +265,17 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       while ($('log').children.length > 30) $('log').lastChild.remove();
     }
 
-    function render(now) {
+    function render() {
       const b = badge();
-      const datePart = state.showDate ? ' ' + fullDate(now) : '';
+      const moc = state.lastActionAt;
+      // Chỉ dùng mốc ĐÃ CHỤP lúc bấm nút; không đọc new Date() ở footer.
+      const datePart = moc && state.showDate ? ' ' + fullDate(moc) : '';
+      const timePart = moc
+        ? '<span class="clock">' + clock(moc) + datePart + '</span> · ' +
+          state.lastActionLabel + ' · '
+        : '';
       $('footer').innerHTML =
-        state.room + ' · ' + state.department + ' · <span class="clock">' +
-        clock(now) + datePart + '</span> · ' +
+        state.room + ' · ' + state.department + ' · ' + timePart +
         (b.dot ? '<span class="live-dot"></span>' : '') +
         '<span class="badge ' + b.cls + '">' + b.text + '</span>';
 
@@ -270,16 +284,17 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       $('title').textContent = state.paused ? 'Thông báo tạm dừng khám' : 'Thông báo từ Bác sĩ';
       $('message').textContent = statusMessage();
       $('meta').innerHTML =
-        'Giờ máy: <b>' + clock(now) + ' ' + fullDate(now) + '</b> · Múi giờ thiết bị: <b>' +
-        timeZone(now) + '</b> · ' +
+        'Mốc thay đổi trạng thái: <b>' +
+        (moc ? clock(moc) + ' ' + fullDate(moc) + ' (' + state.lastActionLabel + ')'
+             : 'chưa có — bấm Tạm dừng / Tiếp tục khám') +
+        '</b> · Múi giờ thiết bị: <b>' + timeZone(new Date()) + '</b> · ' +
         'Trạng thái luồng: <b>' + b.text + '</b> · STT hiện tại: <b>' +
         (state.current || '—') + '</b> · Đang chờ: <b>' + state.waiting.length + '</b>';
     }
 
-    // Đồng hồ nhảy mỗi giây + cập nhật ngay khi tab được mở lại
-    // (tương đương Timer.periodic + WidgetsBindingObserver trong Flutter).
-    function tick() { render(new Date()); }
-    setInterval(tick, 1000);
+    // KHÔNG có setInterval cho đồng hồ. render() chỉ chạy khi có sự
+    // kiện (bấm nút, lịch hẹn realtime, đổi tuỳ chọn, mở lại tab).
+    function tick() { render(); }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
     window.addEventListener('focus', tick);
     tick();
@@ -312,6 +327,14 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
     $('btnNext').onclick = nextPatient;
     $('btnPause').onclick = () => {
       state.paused = !state.paused;
+      // CHỤP GIỜ MÁY đúng thời điểm bấm nút. Không có timer chạy liên
+      // tục: mốc này đứng yên cho đến lần bấm tiếp theo.
+      state.lastActionAt = new Date();
+      state.lastActionLabel = state.paused ? 'Tạm dừng lúc' : 'Tiếp tục lúc';
+      const gio = clock(state.lastActionAt);
+      state.actionMessage = state.paused
+        ? 'Bác sĩ tạm dừng khám lúc ' + gio + '.\nViệc gọi số tiếp theo tạm thời bị dừng.\nVui lòng chờ đến khi bác sĩ tiếp tục khám.'
+        : 'Bác sĩ tiếp tục khám lúc ' + gio + '.\nSố thứ tự được gọi lại bình thường.';
       $('btnPause').textContent = state.paused ? 'Tiếp tục khám' : 'Tạm dừng khám';
       log(state.paused ? 'Bác sĩ tạm dừng khám' : 'Bác sĩ tiếp tục khám');
       tick();
@@ -323,7 +346,11 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       tick();
     };
     $('btnReset').onclick = () => {
-      Object.assign(state, { waiting: [], current: 0, next: 0, lastIssued: 0, paused: false, feed: 'live' });
+      Object.assign(state, {
+        waiting: [], current: 0, next: 0, lastIssued: 0,
+        paused: false, feed: 'live',
+        lastActionAt: null, lastActionLabel: '', actionMessage: null,
+      });
       $('btnPause').textContent = 'Tạm dừng khám';
       $('btnOffline').textContent = 'Mất kết nối';
       log('Đặt lại danh sách lịch hẹn của phòng hôm nay');
@@ -339,7 +366,7 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       }
     }, 6000);
 
-    log('Sẵn sàng: đồng hồ chạy theo giờ máy, thẻ lắng nghe sự kiện realtime');
+    log('Sẵn sàng: chưa có mốc giờ — bấm Tạm dừng / Tiếp tục khám để chụp giờ máy');
   </script>
 </body>
 </html>

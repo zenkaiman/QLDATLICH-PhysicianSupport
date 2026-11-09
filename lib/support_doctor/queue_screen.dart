@@ -500,9 +500,14 @@ class _QueueScreenState extends State<QueueScreen> {
   String? message;
 
   /// Trạng thái luồng dữ liệu realtime. Thẻ thông báo dùng giá trị này để
-  /// hiện nhãn "Đang kết nối…" / "Realtime" / "Mất kết nối" / "Giờ máy"
-  /// ngay cạnh đồng hồ chạy theo giờ của máy.
+  /// hiện nhãn "Đang kết nối…" / "Realtime" / "Mất kết nối" / "Giờ máy".
   QueueFeedState _feedState = QueueFeedState.local;
+
+  /// Thời điểm (giờ máy) của lần bấm "Tạm dừng khám" / "Tiếp tục khám"
+  /// gần nhất. Không có đồng hồ chạy liên tục: giá trị chỉ được chụp tại
+  /// đúng thời điểm bấm nút rồi giữ nguyên cho đến lần bấm sau.
+  DateTime? _lastStatusChangeAt;
+  String _lastStatusChangeLabel = '';
 
   /// Khóa lưu trạng thái phòng trong [RoomSessionStore] (ưu tiên mã phòng).
   String get _storeKey => widget.roomId ?? widget.sessionId;
@@ -561,6 +566,10 @@ class _QueueScreenState extends State<QueueScreen> {
         ..addAll(snapshot.deferredAppointmentIdByNumber);
       _daBatDau = snapshot.daBatDau || snapshot.current > 0;
       paused = snapshot.paused;
+      // Mốc giờ của lần bấm Tạm dừng / Tiếp tục vẫn đứng yên khi rời
+      // phòng rồi mở lại trong cùng phiên chạy app.
+      _lastStatusChangeAt = snapshot.statusChangedAt;
+      _lastStatusChangeLabel = snapshot.statusChangeLabel;
     } else {
       // Lần đầu mở phòng: KHÔNG tự sinh số thứ tự.
       // Chỉ hiện số khi lịch hẹn thật của phòng hôm nay có `so_thu_tu`
@@ -639,6 +648,8 @@ class _QueueScreenState extends State<QueueScreen> {
         _maLichHenDaChoQua,
       )
       ..paused = paused
+      ..statusChangedAt = _lastStatusChangeAt
+      ..statusChangeLabel = _lastStatusChangeLabel
       ..examinedNumbers = <int>[
         for (final entry in passed)
           if (!entry.deferred) entry.number,
@@ -900,7 +911,10 @@ class _QueueScreenState extends State<QueueScreen> {
 
   String get _defaultStatusMessage {
     if (paused) {
-      return 'Bác sĩ đã nhấn nút “Tạm dừng khám”.\n'
+      final mocGio = _lastStatusChangeAt == null
+          ? ''
+          : ' lúc ${formatMayGio(_lastStatusChangeAt!)}';
+      return 'Bác sĩ đã nhấn nút “Tạm dừng khám”$mocGio.\n'
           'Việc gọi số tiếp theo tạm thời bị dừng.\n'
           'Vui lòng chờ đến khi bác sĩ tiếp tục khám.';
     }
@@ -2298,10 +2312,21 @@ class _QueueScreenState extends State<QueueScreen> {
                                 color: paused ? _Ui.green : Colors.white,
                                 onPressed: () => setState(() {
                                   paused = !paused;
+                                  // Chụp GIỜ MÁY đúng thời điểm bấm nút.
+                                  // Không có timer chạy liên tục: mốc này
+                                  // đứng yên cho đến lần bấm tiếp theo.
+                                  final mocGio = DateTime.now();
+                                  final gio = formatMayGio(mocGio);
+                                  _lastStatusChangeAt = mocGio;
+                                  _lastStatusChangeLabel = paused
+                                      ? 'Tạm dừng lúc'
+                                      : 'Tiếp tục lúc';
                                   message = paused
-                                      ? 'Bác sĩ đã nhấn nút “Tạm dừng khám”.\nViệc gọi số tiếp theo tạm thời bị dừng.\n'
+                                      ? 'Bác sĩ tạm dừng khám lúc $gio.\n'
+                                            'Việc gọi số tiếp theo tạm thời bị dừng.\n'
                                             'Vui lòng chờ đến khi bác sĩ tiếp tục khám.'
-                                      : null;
+                                      : 'Bác sĩ tiếp tục khám lúc $gio.\n'
+                                            'Số thứ tự được gọi lại bình thường.';
                                   // Cập nhật ngay trạng thái phòng cho trang chính:
                                   // chỉ khi bấm nút này phòng mới hiện "Tạm dừng".
                                   _syncRoomState();
@@ -2314,13 +2339,15 @@ class _QueueScreenState extends State<QueueScreen> {
                         _StatusBanner(
                           paused: paused,
                           message: message ?? _defaultStatusMessage,
-                          // Footer chạy realtime theo GIỜ MÁY (nhảy mỗi
-                          // giây) kèm trạng thái luồng dữ liệu lịch hẹn.
+                          // Footer CHỈ hiện mốc giờ chụp lúc bấm
+                          // Tạm dừng / Tiếp tục khám, không chạy liên tục.
                           footer: _LiveStatusFooter(
                             prefix:
                                 '${widget.roomName} · ${widget.departmentName}',
                             paused: paused,
                             feedState: _feedState,
+                            statusChangedAt: _lastStatusChangeAt,
+                            statusChangeLabel: _lastStatusChangeLabel,
                           ),
                         ),
                       ],
@@ -3936,29 +3963,30 @@ class _StatusBanner extends StatelessWidget {
 }
 
 /// Định dạng `HH:mm:ss` theo giờ địa phương của MÁY đang chạy app.
-/// `DateTime.now()` trả giờ theo múi giờ của thiết bị, không phải giờ
-/// server, nên thẻ thông báo luôn khớp đồng hồ trên máy.
+/// Dùng cho MỘT MỐC THỜI ĐIỂM đã chụp (lúc bấm Tạm dừng / Tiếp tục
+/// khám), không phải cho đồng hồ chạy liên tục.
 String formatMayGio(DateTime time) {
   String haiChuSo(int value) => value.toString().padLeft(2, '0');
   return '${haiChuSo(time.hour)}:${haiChuSo(time.minute)}'
       ':${haiChuSo(time.second)}';
 }
 
-/// Dòng chân thẻ thông báo chạy REALTIME TRÊN MÁY.
+/// Dòng chân thẻ thông báo: KHÔNG có đồng hồ chạy liên tục.
 ///
-/// - Đồng hồ lấy từ `DateTime.now()` và tự nhảy mỗi giây bằng
-///   [Timer.periodic]; chỉ chính widget nhỏ này vẽ lại, không rebuild
-///   cả màn hình hàng chờ (vốn rất lớn) mỗi giây.
-/// - Khi app bị đưa vào nền rồi mở lại, [WidgetsBindingObserver] cập
-///   ngay giờ mới nhất thay vì đợi nhịp timer tiếp theo.
-/// - Nhãn đi kèm cho biết luồng lịch hẹn Firebase đang ở trạng thái nào:
-///   `Giờ máy` (không có stream), `Đang kết nối…`, `Realtime` (đã nhận
-///   dữ liệu) hoặc `Mất kết nối` (stream báo lỗi).
-class _LiveStatusFooter extends StatefulWidget {
+/// Giờ chỉ xuất hiện khi bác sĩ bấm "Tạm dừng khám" hoặc "Tiếp tục
+/// khám": `_QueueScreenState` chụp `DateTime.now()` đúng thời điểm đó
+/// rồi truyền vào đây. Mốc giờ đứng yên cho đến lần bấm tiếp theo, kể
+/// cả khi luồng lịch hẹn realtime vẫn tiếp tục cập nhật nội dung thẻ.
+/// Khi chưa bấm nút nào, footer chỉ hiện tên phòng/khoa và trạng thái
+/// của luồng dữ liệu (`Giờ máy` / `Đang kết nối…` / `Realtime` /
+/// `Mất kết nối`).
+class _LiveStatusFooter extends StatelessWidget {
   const _LiveStatusFooter({
     required this.prefix,
     required this.paused,
     required this.feedState,
+    required this.statusChangedAt,
+    required this.statusChangeLabel,
   });
 
   /// "Tên phòng · Tên khoa" lấy từ phòng bác sĩ đang mở.
@@ -3966,49 +3994,15 @@ class _LiveStatusFooter extends StatefulWidget {
   final bool paused;
   final QueueFeedState feedState;
 
-  @override
-  State<_LiveStatusFooter> createState() => _LiveStatusFooterState();
-}
-
-class _LiveStatusFooterState extends State<_LiveStatusFooter>
-    with WidgetsBindingObserver {
-  Timer? _timer;
-  late DateTime _now;
-
-  @override
-  void initState() {
-    super.initState();
-    _now = DateTime.now();
-    WidgetsBinding.instance.addObserver(this);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      final now = DateTime.now();
-      // Tránh setState thừa nếu timer bắn trong cùng một giây hiển thị.
-      if (formatMayGio(now) == formatMayGio(_now)) return;
-      setState(() => _now = now);
-    });
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && mounted) {
-      // Giờ máy có thể đã đổi nhiều phút trong lúc app nằm nền.
-      setState(() => _now = DateTime.now());
-    }
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
+  /// `null` khi phòng hôm nay chưa bấm Tạm dừng / Tiếp tục lần nào.
+  final DateTime? statusChangedAt;
+  final String statusChangeLabel;
 
   ({String label, Color color}) get _feedBadge {
-    final neutral = widget.paused
+    final neutral = paused
         ? const Color(0xFFB08F4E)
         : const Color(0xFF8AA79A);
-    return switch (widget.feedState) {
+    return switch (feedState) {
       QueueFeedState.local => (label: 'Giờ máy', color: neutral),
       QueueFeedState.connecting => (
         label: 'Đang kết nối…',
@@ -4029,11 +4023,17 @@ class _LiveStatusFooterState extends State<_LiveStatusFooter>
   Widget build(BuildContext context) {
     final badge = _feedBadge;
     final baseStyle = DefaultTextStyle.of(context).style;
+    final mocGio = statusChangedAt;
     return Text.rich(
       TextSpan(
         style: baseStyle,
         children: <InlineSpan>[
-          TextSpan(text: '${widget.prefix} · ${formatMayGio(_now)} · '),
+          TextSpan(text: '$prefix · '),
+          if (mocGio != null)
+            TextSpan(
+              text: '${formatMayGio(mocGio)} · $statusChangeLabel · ',
+              style: baseStyle.copyWith(fontWeight: FontWeight.w700),
+            ),
           TextSpan(
             text: badge.label,
             style: baseStyle.copyWith(
