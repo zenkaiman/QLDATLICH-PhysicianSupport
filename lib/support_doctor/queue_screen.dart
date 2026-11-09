@@ -453,10 +453,10 @@ class _QueueScreenState extends State<QueueScreen> {
   /// Đăng ký nghe luồng danh sách lịch hẹn của phòng.
   StreamSubscription<AppointmentQueueUpdate>? _appointmentSubscription;
 
-  /// Đăng ký nghe `trang_thai_id` của chính phòng này trên Firestore.
+  /// Đăng ký nghe trạng thái đã đối chiếu từ 4 field của chính phòng này.
   StreamSubscription<int?>? _roomStatusSubscription;
 
-  /// Mã trạng thái nhận gần nhất từ Firestore (`null` = chưa có field).
+  /// Mã trạng thái nhận gần nhất từ Firestore (`null` = chưa có field hợp lệ).
   int? _roomStatusId;
 
   /// Tập số lịch hẹn đủ điều kiện trong lần đồng bộ gần nhất.
