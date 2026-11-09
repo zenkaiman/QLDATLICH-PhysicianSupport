@@ -400,6 +400,12 @@ class _QueueScreenState extends State<QueueScreen> {
   /// tự sinh thêm STT.
   late int lastIssued;
 
+  /// Phòng đã bấm nút “Bắt đầu” chưa. Khi chưa bấm, số hiện tại giữ đúng
+  /// số bắt đầu mặc định là 0 và mọi số nằm trong hàng chờ; nút chính hiện
+  /// chữ “Bắt đầu”, bấm lần đầu mới đưa số nhỏ nhất lên “đang khám”, sau đó
+  /// nút đổi thành “Tiếp theo”.
+  bool _daBatDau = false;
+
   /// Các số đã qua lượt:
   ///  - deferred = false: đã khám xong (dùng cho "Gọi lại số").
   ///  - deferred = true : bệnh nhân xin đợi (dùng cho "+ Chèn" để chèn lại).
@@ -531,6 +537,7 @@ class _QueueScreenState extends State<QueueScreen> {
       _maLichHenDaChoQua
         ..clear()
         ..addAll(snapshot.deferredAppointmentIdByNumber);
+      _daBatDau = snapshot.daBatDau || snapshot.current > 0;
       paused = snapshot.paused;
     } else {
       // Lần đầu mở phòng: KHÔNG tự sinh số thứ tự.
@@ -542,6 +549,9 @@ class _QueueScreenState extends State<QueueScreen> {
       next = 0;
       waiting = <int>[];
       lastIssued = start;
+      // Số bắt đầu mặc định là 0; chỉ khi nơi gọi truyền sẵn [initialCurrent]
+      // mới coi như phòng đã bắt đầu gọi số.
+      _daBatDau = start > 0;
       snapshot
         ..started = true
         ..paused = false;
@@ -593,6 +603,7 @@ class _QueueScreenState extends State<QueueScreen> {
       ..next = next
       ..waiting = List<int>.of(waiting)
       ..lastIssued = lastIssued
+      ..daBatDau = _daBatDau
       ..absentNumbers = _absentAppointmentNumbers.toList()
       ..requeuedNumbers = _requeuedAppointmentNumbers.toList()
       ..appointmentIdByNumber = Map<int, String>.of(_appointmentIdByNumber)
@@ -743,9 +754,21 @@ class _QueueScreenState extends State<QueueScreen> {
           newlyRequeuedNumbers.add(number);
         }
       }
-      current = result.current;
-      next = result.next;
-      waiting = result.waiting;
+      if (_daBatDau) {
+        current = result.current;
+        next = result.next;
+        waiting = result.waiting;
+      } else {
+        // Chưa bấm “Bắt đầu”: giữ số hiện tại = 0, dồn hết số về hàng chờ.
+        final cho = <int>[
+          if (result.current > 0) result.current,
+          if (result.next > 0) result.next,
+          ...result.waiting,
+        ];
+        current = 0;
+        next = 0;
+        waiting = cho;
+      }
       _scheduledFutureInserts
         ..clear()
         ..addAll(result.scheduledInserts);
@@ -757,6 +780,10 @@ class _QueueScreenState extends State<QueueScreen> {
                   'Bệnh nhân số $current đang khám; số $next là số tiếp theo.'
             : 'Đã nạp số thứ tự từ lịch hẹn đã xác nhận.\n'
                   'Bệnh nhân số $current đang khám.';
+      } else if (wasEmpty && !_daBatDau && waiting.isNotEmpty) {
+        message =
+            'Đã nạp ${waiting.length} số từ lịch hẹn đã xác nhận.\n'
+            'Số bắt đầu là 0 – nhấn “Bắt đầu” để gọi số ${waiting.first}.';
       }
       _syncRoomState();
     });
@@ -848,6 +875,11 @@ class _QueueScreenState extends State<QueueScreen> {
           'Vui lòng chờ đến khi bác sĩ tiếp tục khám.';
     }
     if (current <= 0) {
+      if (waiting.isNotEmpty) {
+        return 'Số bắt đầu là 0 – chưa gọi số nào.\n'
+            'Đang có ${waiting.length} số trong hàng chờ; nhấn “Bắt đầu” '
+            'để gọi số ${waiting.first}.';
+      }
       return 'Chưa có bệnh nhân nào trong danh sách lịch hẹn đã xác nhận '
           'của phòng hôm nay.\n'
           'STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.';
@@ -906,7 +938,24 @@ class _QueueScreenState extends State<QueueScreen> {
       return;
     }
     if (current <= 0) {
-      notify('Chưa có lịch hẹn đã xác nhận nào để gọi.');
+      // Số bắt đầu mặc định là 0: nút chính lúc này là “Bắt đầu”.
+      // Bấm lần đầu mới đưa số nhỏ nhất đang chờ lên thành số đang khám.
+      if (waiting.isEmpty) {
+        notify('Chưa có lịch hẹn đã xác nhận nào để bắt đầu gọi số.');
+        return;
+      }
+      setState(() {
+        _daBatDau = true;
+        current = 0;
+        next = 0;
+        _promoteWaitingHeads();
+        message =
+            'Đã bắt đầu gọi số.\n'
+            'Bệnh nhân số $current đang khám'
+            '${next > 0 ? '; số $next là số tiếp theo' : ''}.';
+        _syncRoomState();
+      });
+      _chayLaiDanhSachSo(imLang: true);
       return;
     }
     final finished = current;
@@ -976,6 +1025,7 @@ class _QueueScreenState extends State<QueueScreen> {
     if (!mounted || confirmed != true) return;
 
     setState(() {
+      _daBatDau = false;
       passed.clear();
       _deferredHistory.clear();
       _scheduledFutureInserts.clear();
@@ -993,15 +1043,22 @@ class _QueueScreenState extends State<QueueScreen> {
         scheduledInserts: const <InsertResult>[],
         lastIssued: 0,
       );
-      current = result.current;
-      next = result.next;
-      waiting = result.waiting;
+      // Đặt lại số cũng đưa phòng về số bắt đầu 0 (chưa gọi số nào) và giữ
+      // nguyên số thứ tự thật của lịch hẹn, không tự đánh lại từ 1.
+      current = 0;
+      next = 0;
+      waiting = <int>[
+        if (result.current > 0) result.current,
+        if (result.next > 0) result.next,
+        ...result.waiting,
+      ];
       lastIssued = result.lastIssued;
-      message = current > 0
-          ? 'Đã đặt lại hàng chờ theo lịch hẹn đã xác nhận: số hiện '
-                'tại = $current${next > 0 ? ', số tiếp theo = $next' : ''}.'
-          : 'Đã đặt lại hàng chờ. Hiện chưa có lịch hẹn đã xác nhận '
-                'nào cho phòng hôm nay.';
+      message = waiting.isNotEmpty
+          ? 'Đã đặt lại hàng chờ theo lịch hẹn đã xác nhận: số bắt đầu = 0, '
+                '${waiting.length} số đang chờ. Nhấn “Bắt đầu” để gọi số '
+                '${waiting.first}.'
+          : 'Đã đặt lại hàng chờ. Hiện chưa có lịch hẹn đã xác nhận nào cho '
+                'phòng hôm nay.';
       _syncRoomState();
     });
     notify('Đã đặt lại hàng chờ của ${widget.roomName} theo lịch hẹn.');
@@ -1254,6 +1311,7 @@ class _QueueScreenState extends State<QueueScreen> {
     // (hàm tự hiện thông báo khi có số phải đổi).
     if (!_chayLaiDanhSachSo(
       moDau: 'Số $number đã vào “SỐ ĐÃ CHO QUA” và đã đánh lại số',
+      donTheoSoDaKham: true,
     )) {
       notify('Số $number đã được chuyển vào “SỐ ĐÃ CHO QUA”.');
     }
@@ -1602,7 +1660,11 @@ class _QueueScreenState extends State<QueueScreen> {
   ///
   /// Nhờ vậy mọi thao tác đều "tự lành": dù trước đó dữ liệu có lỗi, lỗ số
   /// hay trùng số thì sau khi bấm là dãy về đúng 1, 2, 3, … n.
-  bool _chayLaiDanhSachSo({String? moDau, bool imLang = false}) {
+  bool _chayLaiDanhSachSo({
+    String? moDau,
+    bool imLang = false,
+    bool donTheoSoDaKham = false,
+  }) {
     if (!mounted) return false;
 
     // 1) Dọn trùng: mỗi số chỉ được nằm ở một vị trí.
@@ -1626,22 +1688,32 @@ class _QueueScreenState extends State<QueueScreen> {
     }
     waiting = waitingMoi;
 
-    // 2) Số nền: số lớn nhất đã khám xong.
-    var soMoi = 0;
-    for (final entry in passed) {
-      if (!entry.deferred && entry.number > soMoi) soMoi = entry.number;
-    }
-
     // 3) Đánh lại theo đúng thứ tự gọi.
     final order = <int>[
       if (current > 0) current,
       if (next > 0) next,
       ...waiting,
     ];
-    // Nếu hàng chờ đang bắt đầu từ số không lớn hơn số đã khám xong (ví dụ
-    // vừa bấm “Gọi lại” một số cũ) thì đánh lại theo số nền sẽ đẩy lùi cả
-    // hàng chờ lên — không đúng ý người dùng. Trường hợp đó chỉ dọn trùng.
-    final dungSoNen = order.isEmpty || order.first > soMoi;
+
+    // 2) Số nền:
+    //  - [donTheoSoDaKham] = true (chỉ dùng sau khi bấm “Đợi”): nền là số lớn
+    //    nhất đã khám xong, nên các số phía sau số bị cho qua giảm 1.
+    //  - còn lại: NEO số đầu tiên, chỉ dồn các lỗ trống phía sau. Nhờ vậy
+    //    màn hình tự sửa lỗi lỗ số/trùng số mà KHÔNG kéo cả hàng chờ về số 1
+    //    khi phiên làm việc bắt đầu từ số khác (vd 5, 6…).
+    var soMoi = 0;
+    if (donTheoSoDaKham) {
+      for (final entry in passed) {
+        if (!entry.deferred && entry.number > soMoi) soMoi = entry.number;
+      }
+    } else if (order.isNotEmpty) {
+      soMoi = order.first - 1;
+    }
+    // Chỉ dồn xuống khi số đầu hàng chờ đang nối tiếp số đã khám (hoặc bắt
+    // đầu từ 1, 2). Trường hợp “Gọi lại” một số cũ thì giữ nguyên.
+    final dungSoNen = order.isNotEmpty &&
+        (!donTheoSoDaKham ||
+            (order.first > soMoi && order.first <= soMoi + 2));
     final renumber = <int, int>{};
     if (dungSoNen) {
       for (final so in order) {
@@ -1903,7 +1975,9 @@ class _QueueScreenState extends State<QueueScreen> {
                             Expanded(
                               child: _NumberCard(
                                 label: 'SỐ HIỆN TẠI',
-                                value: current > 0 ? '$current' : '—',
+                                // Số bắt đầu mặc định là 0 cho tới khi bấm
+                                // nút “Bắt đầu”.
+                                value: '$current',
                                 subtitle: _patientNameSubtitle(current),
                                 gradient: _Ui.greenCard,
                                 foreground: Colors.white,
@@ -2144,8 +2218,10 @@ class _QueueScreenState extends State<QueueScreen> {
                             Expanded(
                               flex: 4,
                               child: _ActionButton(
-                                label: 'Tiếp theo',
-                                icon: Icons.arrow_forward_rounded,
+                                label: current > 0 ? 'Tiếp theo' : 'Bắt đầu',
+                                icon: current > 0
+                                    ? Icons.arrow_forward_rounded
+                                    : Icons.play_arrow_rounded,
                                 primary: true,
                                 onPressed: callNext,
                               ),

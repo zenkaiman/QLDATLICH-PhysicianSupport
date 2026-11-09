@@ -11,6 +11,10 @@ class RoomSessionSnapshot {
   /// Khi chưa mở, trang chính hiển thị đúng dữ liệu phòng ban đầu.
   bool started = false;
 
+  /// Phòng đã bấm nút “Bắt đầu” chưa. Trước khi bấm, số hiện tại giữ đúng
+  /// số bắt đầu mặc định là 0 và nút chính hiện chữ “Bắt đầu”.
+  bool daBatDau = false;
+
   /// Số hiện tại và số kế tiếp đang hiển thị ở màn hình hàng chờ.
   int current = 0;
   int next = 0;
