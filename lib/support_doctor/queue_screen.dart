@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'room_session_store.dart';
+import 'room_status.dart';
 
 /// Một lượt đã qua: số thứ tự + có phải bệnh nhân xin đợi hay không.
 typedef PassedEntry = ({int number, bool deferred});
@@ -350,6 +351,8 @@ class QueueScreen extends StatefulWidget {
     this.appointmentQueueStream,
     this.onAppointmentOutcome,
     this.onRenumberAppointment,
+    this.roomStatusStream,
+    this.onRoomStatusChanged,
   });
 
   /// Mã phiên khám – gom các lượt của cùng một buổi/ngày.
@@ -397,6 +400,15 @@ class QueueScreen extends StatefulWidget {
   final Future<void> Function(String appointmentId, int soThuTu)?
   onRenumberAppointment;
 
+  /// Luồng mã `trang_thai_id` của `PhongKham/{roomId}` (12 tạm dừng /
+  /// 13 đang khám / 14 đóng phòng). `null` = document chưa có field,
+  /// lúc đó màn hình giữ nguyên trạng thái phiên local.
+  final Stream<int?>? roomStatusStream;
+
+  /// Ghi mã trạng thái mới lên Firestore khi bác sĩ bấm nút
+  /// Tạm dừng / Tiếp tục hoặc Đóng / Mở phòng khám.
+  final Future<void> Function(int statusId)? onRoomStatusChanged;
+
   @override
   State<QueueScreen> createState() => _QueueScreenState();
 }
@@ -439,6 +451,12 @@ class _QueueScreenState extends State<QueueScreen> {
 
   /// Đăng ký nghe luồng danh sách lịch hẹn của phòng.
   StreamSubscription<AppointmentQueueUpdate>? _appointmentSubscription;
+
+  /// Đăng ký nghe `trang_thai_id` của chính phòng này trên Firestore.
+  StreamSubscription<int?>? _roomStatusSubscription;
+
+  /// Mã trạng thái nhận gần nhất từ Firestore (`null` = chưa có field).
+  int? _roomStatusId;
 
   /// Tập số lịch hẹn đủ điều kiện trong lần đồng bộ gần nhất.
   List<int> _eligibleAppointmentNumbers = <int>[];
@@ -592,6 +610,17 @@ class _QueueScreenState extends State<QueueScreen> {
         ..started = true
         ..paused = false;
     }
+    final roomStatusStream = widget.roomStatusStream;
+    if (roomStatusStream != null) {
+      _roomStatusSubscription = roomStatusStream.listen(
+        _applyRoomStatusId,
+        onError: (_) {
+          // Lỗi đọc trạng thái không chặn hàng chờ; giữ trạng thái local.
+          notify('Không đọc được trạng thái phòng khám. Kiểm tra kết nối.');
+        },
+      );
+    }
+
     final appointmentStream = widget.appointmentQueueStream;
     if (appointmentStream != null) {
       _feedState = QueueFeedState.connecting;
@@ -620,8 +649,42 @@ class _QueueScreenState extends State<QueueScreen> {
 
   @override
   void dispose() {
+    _roomStatusSubscription?.cancel();
     _appointmentSubscription?.cancel();
     super.dispose();
+  }
+
+  /// Áp mã `trang_thai_id` từ `PhongKham/{roomId}` vào banner và các nút:
+  /// 12 → Tạm dừng khám, 13 → Đang khám, 14 → Đóng phòng khám.
+  /// `null` (chưa có field) trả quyền điều khiển về trạng thái phiên local.
+  void _applyRoomStatusId(int? id) {
+    if (!mounted || id == _roomStatusId) return;
+    _roomStatusId = id;
+    if (id == null) return;
+    final nextPaused = id == kRoomStatusPausedId;
+    final nextClosed = id == kRoomStatusClosedId;
+    if (paused == nextPaused && closed == nextClosed) return;
+    setState(() {
+      paused = nextPaused;
+      closed = nextClosed;
+      // Trạng thái đến từ Firestore/thiết bị khác: dùng lại thông báo
+      // mặc định theo trạng thái mới, KHÔNG chụp lại mốc giờ máy.
+      message = null;
+    });
+    _syncRoomState();
+  }
+
+  /// Ghi trạng thái vừa bấm lên Firestore (nếu màn hình có kết nối
+  /// Firestore). Lỗi chỉ hiện thông báo, không đảo ngược giao diện vì
+  /// luồng realtime sẽ tự sửa nếu ghi không thành công.
+  Future<void> _publishRoomStatusId(int id) async {
+    final callback = widget.onRoomStatusChanged;
+    if (callback == null) return;
+    try {
+      await callback(id);
+    } catch (_) {
+      notify('Không cập nhật được trạng thái phòng khám. Kiểm tra kết nối.');
+    }
   }
 
   /// Ghi trạng thái hiện tại của phòng vào [RoomSessionStore] và báo cho
@@ -2368,6 +2431,16 @@ class _QueueScreenState extends State<QueueScreen> {
                                     // chỉ khi bấm nút này phòng mới hiện "Tạm dừng".
                                     _syncRoomState();
                                   });
+                                  // Đồng bộ mã 12 (tạm dừng) / 13 (đang khám)
+                                  // lên PhongKham/{roomId}. Các màn hình và
+                                  // thiết bị khác nghe realtime sẽ đổi theo.
+                                  unawaited(
+                                    _publishRoomStatusId(
+                                      paused
+                                          ? kRoomStatusPausedId
+                                          : kRoomStatusOpenId,
+                                    ),
+                                  );
                                 },
                               ),
                             ),
@@ -2413,6 +2486,14 @@ class _QueueScreenState extends State<QueueScreen> {
                               message = null;
                               _syncRoomState();
                             });
+                            // Đóng = 14, Mở lại = 13 (đang khám).
+                            unawaited(
+                              _publishRoomStatusId(
+                                seDong
+                                    ? kRoomStatusClosedId
+                                    : kRoomStatusOpenId,
+                              ),
+                            );
                             notify(
                               seDong
                                   ? 'Đã đóng phòng khám. Các thao tác gọi số '

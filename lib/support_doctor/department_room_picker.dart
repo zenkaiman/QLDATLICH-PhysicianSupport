@@ -6,6 +6,7 @@ import '../screens/auth/login_screen.dart';
 import '../screens/letan_c1/letan_profile_tab_c1.dart';
 import 'queue_screen.dart';
 import 'room_session_store.dart';
+import 'room_status.dart';
 
 /// A reusable screen for choosing a department and then a clinic room.
 ///
@@ -446,17 +447,17 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
       (_RoomFilter.all, 'Tất cả', _departmentRooms.length),
       (
         _RoomFilter.open,
-        'Đang khám',
+        '${kRoomStatusLabels[kRoomStatusOpenId]} ($kRoomStatusOpenId)',
         _departmentRooms.where(widget.isOpen).length,
       ),
       (
         _RoomFilter.paused,
-        'Tạm dừng',
+        '${kRoomStatusLabels[kRoomStatusPausedId]} ($kRoomStatusPausedId)',
         _departmentRooms.where(widget.isPaused).length,
       ),
       (
         _RoomFilter.closed,
-        'Đã đóng',
+        '${kRoomStatusLabels[kRoomStatusClosedId]} ($kRoomStatusClosedId)',
         _departmentRooms.where(widget.isClosed).length,
       ),
     ];
@@ -1094,10 +1095,25 @@ class _PickerMeta extends StatelessWidget {
 enum ClinicRoomStatus { open, paused, closed }
 
 extension ClinicRoomStatusLabel on ClinicRoomStatus {
+  /// Nhãn ngắn gọn trên thẻ phòng (dữ liệu cũ chưa có `trang_thai_id`).
   String get label => switch (this) {
     ClinicRoomStatus.open => 'Đang khám',
     ClinicRoomStatus.paused => 'Tạm dừng',
     ClinicRoomStatus.closed => 'Đã đóng',
+  };
+
+  /// Mã id tương ứng để ghi ngược lên `PhongKham/{roomId}`.
+  int get statusId => switch (this) {
+    ClinicRoomStatus.open => kRoomStatusOpenId,
+    ClinicRoomStatus.paused => kRoomStatusPausedId,
+    ClinicRoomStatus.closed => kRoomStatusClosedId,
+  };
+
+  /// Nhãn đầy đủ theo đúng bảng 12/13/14.
+  String get fullLabel => switch (this) {
+    ClinicRoomStatus.open => kRoomStatusLabels[kRoomStatusOpenId]!,
+    ClinicRoomStatus.paused => kRoomStatusLabels[kRoomStatusPausedId]!,
+    ClinicRoomStatus.closed => kRoomStatusLabels[kRoomStatusClosedId]!,
   };
 }
 
@@ -1111,6 +1127,7 @@ class ClinicRoomData {
     required this.department,
     required this.staffId,
     required this.status,
+    this.trangThaiId,
     this.currentNumber,
     this.waitingCount = 0,
     this.examinedCount = 0,
@@ -1128,13 +1145,31 @@ class ClinicRoomData {
   final String department;
   final String staffId;
   final ClinicRoomStatus status;
+
+  /// Mã `trang_thai_id` đọc được từ document `PhongKham/{id}`
+  /// (12 tạm dừng / 13 đang khám / 14 đóng phòng). `null` khi document
+  /// chưa có trường này — lúc đó dùng trạng thái phiên trong
+  /// [RoomSessionStore] như cũ.
+  final int? trangThaiId;
   final int? currentNumber;
   final int waitingCount;
   final int examinedCount;
 
+  /// Nhãn hiện trong bảng trạng thái phòng khám. Khi document có
+  /// `trang_thai_id` thì hiện đúng nhãn 12/13/14 kèm mã để đối chiếu.
+  String get statusLabel {
+    final id = trangThaiId;
+    if (id == null) return status.label;
+    final mapped = kRoomStatusLabels[id];
+    return mapped == null
+        ? '${status.label} · $id'
+        : '$mapped · $id';
+  }
+
   /// Bản sao có cập nhật trạng thái/số liệu theo thời gian chạy.
   ClinicRoomData copyWith({
     ClinicRoomStatus? status,
+    int? trangThaiId,
     int? currentNumber,
     int? waitingCount,
     int? examinedCount,
@@ -1146,6 +1181,7 @@ class ClinicRoomData {
     department: department,
     staffId: staffId,
     status: status ?? this.status,
+    trangThaiId: trangThaiId ?? this.trangThaiId,
     currentNumber: currentNumber ?? this.currentNumber,
     waitingCount: waitingCount ?? this.waitingCount,
     examinedCount: examinedCount ?? this.examinedCount,
@@ -1161,8 +1197,9 @@ class ClinicRoomData {
   }
 }
 
-/// Nguồn số thứ tự từ lịch hẹn cho một phòng: luồng cập nhật các số
-/// đủ điều kiện và hàm báo kết quả khám xong/vắng mặt về nơi lưu trữ.
+/// Nguồn dữ liệu realtime cho một phòng: luồng số thứ tự từ lịch hẹn,
+/// luồng `trang_thai_id` của chính phòng, và các hàm ghi kết quả khám /
+/// số thứ tự / trạng thái về nơi lưu trữ.
 typedef ClinicAppointmentFeed = ({
   Stream<AppointmentQueueUpdate> updates,
   Future<void> Function(String appointmentId, AppointmentOutcome outcome)
@@ -1171,6 +1208,15 @@ typedef ClinicAppointmentFeed = ({
   /// Ghi số thứ tự mới của một lịch hẹn khi nhân viên chèn số: số vừa
   /// chèn nhận `số mốc + 1`, các số phía sau tăng thêm 1.
   Future<void> Function(String appointmentId, int soThuTu) renumber,
+
+  /// Mã `trang_thai_id` của `PhongKham/{roomId}` theo thời gian thực:
+  /// 12 tạm dừng / 13 đang khám / 14 đóng phòng; `null` khi document
+  /// chưa có trường này.
+  Stream<int?> roomStatus,
+
+  /// Ghi mã trạng thái mới lên Firestore khi bác sĩ bấm nút
+  /// Tạm dừng / Tiếp tục hoặc Đóng / Mở phòng khám.
+  Future<void> Function(int statusId) setRoomStatus,
 });
 
 /// Màn hình chọn khoa/phòng đã kết nối với QueueScreen trong queue_screen.dart.
@@ -1223,11 +1269,16 @@ class ClinicRoomPickerScreen extends StatelessWidget {
       if (RoomSessionStore.instance.sessionOf(room.id) case final snapshot
           when snapshot.started)
         room.copyWith(
-          status: switch (snapshot.status) {
-            RoomRuntimeStatus.open => ClinicRoomStatus.open,
-            RoomRuntimeStatus.paused => ClinicRoomStatus.paused,
-            RoomRuntimeStatus.closed => ClinicRoomStatus.closed,
-          },
+          // Khi document PhongKham có `trang_thai_id` (12/13/14) thì
+          // Firestore là nguồn sự thật cho bảng trạng thái; chỉ phủ
+          // trạng thái phiên local cho dữ liệu cũ chưa có trường này.
+          status: room.trangThaiId != null
+              ? room.status
+              : switch (snapshot.status) {
+                RoomRuntimeStatus.open => ClinicRoomStatus.open,
+                RoomRuntimeStatus.paused => ClinicRoomStatus.paused,
+                RoomRuntimeStatus.closed => ClinicRoomStatus.closed,
+              },
           currentNumber: snapshot.currentNumber,
           waitingCount: snapshot.waitingCount,
           examinedCount: snapshot.examinedCount,
@@ -1253,7 +1304,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
         departmentIdOf: (room) => room.departmentId,
         roomIdOf: (room) => room.id,
         roomNameOf: (room) => room.name,
-        statusLabelOf: (room) => room.status.label,
+        statusLabelOf: (room) => room.statusLabel,
         isOpen: (room) => room.status == ClinicRoomStatus.open,
         isPaused: (room) => room.status == ClinicRoomStatus.paused,
         isClosed: (room) => room.status == ClinicRoomStatus.closed,
@@ -1274,6 +1325,8 @@ class ClinicRoomPickerScreen extends StatelessWidget {
                 appointmentQueueStream: appointmentFeed?.updates,
                 onAppointmentOutcome: appointmentFeed?.reportOutcome,
                 onRenumberAppointment: appointmentFeed?.renumber,
+                roomStatusStream: appointmentFeed?.roomStatus,
+                onRoomStatusChanged: appointmentFeed?.setRoomStatus,
               ),
             ),
           );
