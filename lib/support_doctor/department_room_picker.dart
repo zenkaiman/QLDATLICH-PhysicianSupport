@@ -456,7 +456,7 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
       ),
       (
         _RoomFilter.closed,
-        'Chưa mở',
+        'Đã đóng',
         _departmentRooms.where(widget.isClosed).length,
       ),
     ];
@@ -741,9 +741,16 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
         borderRadius: BorderRadius.circular(22),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: closed
-              ? () => _showMessage('${widget.roomNameOf(room)} chưa mở.')
-              : () => widget.onRoomSelected(room),
+          // Phòng đã đóng VẪN vào được màn hình hàng chờ để bác sĩ bấm
+          // "Mở phòng khám" ở nút dưới cùng; nếu chặn tap thì phòng bị kẹt.
+          onTap: () {
+            if (closed) {
+              _showMessage(
+                '${widget.roomNameOf(room)} đã đóng. Mở lại từ trong phòng.',
+              );
+            }
+            widget.onRoomSelected(room);
+          },
           child: Padding(
             padding: EdgeInsets.all(compact ? 14 : 16),
             child: Row(
@@ -1090,7 +1097,7 @@ extension ClinicRoomStatusLabel on ClinicRoomStatus {
   String get label => switch (this) {
     ClinicRoomStatus.open => 'Đang khám',
     ClinicRoomStatus.paused => 'Tạm dừng',
-    ClinicRoomStatus.closed => 'Chưa mở',
+    ClinicRoomStatus.closed => 'Đã đóng',
   };
 }
 

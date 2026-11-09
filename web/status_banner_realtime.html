@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Thông báo từ Bác sĩ · Realtime trên máy</title>
+  <title>Thông báo từ Bác sĩ · 3 trạng thái phòng</title>
   <style>
     :root {
       --green: #2ac653;
@@ -18,6 +18,12 @@
       --amber-title: #6b4a00;
       --amber-body: #8a6a2f;
       --amber-foot: #b08f4e;
+      --red: #e5484d;
+      --red-soft: #fff1f0;
+      --red-border: #ffd9d6;
+      --red-title: #7a1d1d;
+      --red-body: #8a4b45;
+      --red-foot: #b5807a;
     }
     * { box-sizing: border-box; }
     body {
@@ -50,6 +56,11 @@
       border-color: var(--amber-border);
       box-shadow: 0 10px 20px rgba(245, 166, 35, .12);
     }
+    .banner.closed {
+      background: var(--red-soft);
+      border-color: var(--red-border);
+      box-shadow: 0 10px 20px rgba(229, 72, 77, .12);
+    }
     .icon-halo {
       flex: none;
       width: 39px; height: 39px;
@@ -59,6 +70,7 @@
       transition: background .26s ease;
     }
     .paused .icon-halo { background: rgba(245, 166, 35, .18); }
+    .closed .icon-halo { background: rgba(229, 72, 77, .18); }
     .icon {
       width: 32px; height: 32px;
       border-radius: 50%;
@@ -69,12 +81,14 @@
       transition: background .26s ease;
     }
     .paused .icon { background: var(--amber); }
+    .closed .icon { background: var(--red); }
     .banner-body { flex: 1; min-width: 0; }
     .banner-title {
       font-size: 15px; font-weight: 800; color: var(--green-title);
       transition: color .26s ease;
     }
     .paused .banner-title { color: var(--amber-title); }
+    .closed .banner-title { color: var(--red-title); }
     .banner-message {
       margin-top: 6px;
       font-size: 12.4px; line-height: 1.55;
@@ -83,6 +97,7 @@
       transition: color .26s ease;
     }
     .paused .banner-message { color: var(--amber-body); }
+    .closed .banner-message { color: var(--red-body); }
     .banner-footer {
       margin-top: 10px;
       display: flex; align-items: center; gap: 6px;
@@ -92,8 +107,10 @@
       transition: color .26s ease;
     }
     .paused .banner-footer { color: var(--amber-foot); }
+    .closed .banner-footer { color: var(--red-foot); }
     .bullet { flex: none; width: 4px; height: 4px; border-radius: 50%; background: #7fae92; }
     .paused .bullet { background: #c9a96a; }
+    .closed .bullet { background: #d9a8a2; }
     .clock { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: .2px; }
     .badge { font-weight: 800; }
     .badge.live { color: #1e9c48; }
@@ -140,6 +157,27 @@
     }
     .log div { white-space: nowrap; }
     .log span { color: #1e9c48; font-weight: 700; }
+
+    /* ---- Nút dưới cùng: đóng / mở phòng khám ---- */
+    .bottom-bar { margin-top: 18px; }
+    .room-toggle {
+      width: 100%;
+      padding: 16px 18px;
+      font-size: 13.5px;
+      border-radius: 16px;
+      border: 1.5px solid #f6d5d2;
+      background: #fff;
+      color: #c23b3b;
+      box-shadow: 0 8px 18px rgba(16, 24, 40, .06);
+    }
+    .room-toggle:hover { background: #fff5f4; }
+    .room-toggle.open-room {
+      border-color: #1e9c48;
+      background: #1e9c48;
+      color: #fff;
+    }
+    .room-toggle.open-room:hover { background: #18853d; }
+    .bottom-hint { margin-top: 8px; font-size: 11.5px; color: #77877e; }
   </style>
 </head>
 <body>
@@ -151,6 +189,8 @@
       <b>giờ địa phương của máy bạn</b> khi bấm <b>Tạm dừng khám</b> hoặc
       <b>Tiếp tục khám</b>, rồi đứng yên cho đến lần bấm tiếp theo. Nội dung thẻ vẫn đổi
       theo sự kiện lịch hẹn realtime (mô phỏng tại chỗ, không cần Firebase).
+      Thẻ có <b>3 trạng thái</b>: Đang khám / Tạm dừng / <b>Đã đóng phòng</b>, với nút
+      <b>Đóng / Mở phòng khám</b> ở dưới cùng.
     </p>
 
     <div class="banner" id="banner">
@@ -182,6 +222,14 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       <div class="meta" id="meta"></div>
       <div class="log" id="log"></div>
     </div>
+
+    <!-- Nút dưới cùng, nằm PHÍA DƯỚI thẻ thông báo bác sĩ -->
+    <div class="bottom-bar">
+      <button class="room-toggle" id="btnRoom">🔒 Đóng phòng khám</button>
+      <div class="bottom-hint" id="roomHint">
+        Trạng thái phòng: Đang khám. Đóng phòng sẽ khoá mọi thao tác gọi số.
+      </div>
+    </div>
   </div>
 
   <script>
@@ -194,6 +242,7 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       next: 0,
       lastIssued: 0,
       paused: false,
+      closed: false,         // trạng thái thứ 3: đóng phòng khám
       feed: 'live',          // live | connecting | error | local
       auto: true,
       showDate: false,
@@ -211,6 +260,10 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       'Bác sĩ đã nhấn nút “Tạm dừng khám”.\n' +
       'Việc gọi số tiếp theo tạm thời bị dừng.\n' +
       'Vui lòng chờ đến khi bác sĩ tiếp tục khám.';
+    const closedMessage =
+      'Phòng khám đã đóng.\n' +
+      'Không gọi số mới cho đến khi bác sĩ mở lại phòng.\n' +
+      'Nhấn “Mở phòng khám” ở nút dưới cùng để tiếp tục.';
 
     function two(n) { return String(n).padStart(2, '0'); }
 
@@ -237,6 +290,8 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
     }
 
     function statusMessage() {
+      // Đóng phòng có mức ưu tiên cao nhất, lấn cả lời nhắn tạm dừng.
+      if (state.closed) return closedMessage;
       // Lời nhắn kèm mốc giờ được chốt lúc bấm nút và đứng yên cho đến
       // lần bấm tiếp theo — không bị ghi đè bởi đồng hồ hay sự kiện STT.
       if (state.actionMessage) return state.actionMessage;
@@ -268,6 +323,9 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
     function render() {
       const b = badge();
       const moc = state.lastActionAt;
+      const roomStatus = state.closed ? 'Đã đóng'
+                       : state.paused ? 'Tạm dừng'
+                       : 'Đang khám';
       // Chỉ dùng mốc ĐÃ CHỤP lúc bấm nút; không đọc new Date() ở footer.
       const datePart = moc && state.showDate ? ' ' + fullDate(moc) : '';
       const timePart = moc
@@ -275,15 +333,26 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
           state.lastActionLabel + ' · '
         : '';
       $('footer').innerHTML =
-        state.room + ' · ' + state.department + ' · ' + timePart +
+        state.room + ' · ' + state.department + ' · ' +
+        (state.closed ? '<span class="badge error">Đã đóng phòng</span> · ' : '') +
+        timePart +
         (b.dot ? '<span class="live-dot"></span>' : '') +
         '<span class="badge ' + b.cls + '">' + b.text + '</span>';
 
-      $('banner').classList.toggle('paused', state.paused);
-      $('icon').textContent = state.paused ? 'Ⅱ' : '✓';
-      $('title').textContent = state.paused ? 'Thông báo tạm dừng khám' : 'Thông báo từ Bác sĩ';
+      $('banner').classList.toggle('paused', state.paused && !state.closed);
+      $('banner').classList.toggle('closed', state.closed);
+      $('icon').textContent = state.closed ? '✕' : (state.paused ? 'Ⅱ' : '✓');
+      $('title').textContent = state.closed ? 'Thông báo đóng phòng khám'
+                             : state.paused ? 'Thông báo tạm dừng khám'
+                             : 'Thông báo từ Bác sĩ';
       $('message').textContent = statusMessage();
+      $('btnRoom').textContent = state.closed ? '🔓 Mở phòng khám' : '🔒 Đóng phòng khám';
+      $('btnRoom').classList.toggle('open-room', state.closed);
+      $('roomHint').textContent = state.closed
+        ? 'Trạng thái phòng: Đã đóng — các thao tác gọi số bị khoá. Bấm để mở lại.'
+        : 'Trạng thái phòng: ' + roomStatus + '. Đóng phòng sẽ khoá mọi thao tác gọi số.';
       $('meta').innerHTML =
+        'Trạng thái phòng: <b>' + roomStatus + '</b> · ' +
         'Mốc thay đổi trạng thái: <b>' +
         (moc ? clock(moc) + ' ' + fullDate(moc) + ' (' + state.lastActionLabel + ')'
              : 'chưa có — bấm Tạm dừng / Tiếp tục khám') +
@@ -314,6 +383,7 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
     }
 
     function nextPatient() {
+      if (state.closed) { log('Phòng khám đã đóng — nhấn “Mở phòng khám” để tiếp tục'); return; }
       if (state.paused) { log('Đang tạm dừng khám — không gọi số tiếp theo'); return; }
       if (state.current <= 0) { log('Chưa có số nào để gọi'); return; }
       const done = state.current;
@@ -326,6 +396,7 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
     $('btnAdd').onclick = () => addAppointment(false);
     $('btnNext').onclick = nextPatient;
     $('btnPause').onclick = () => {
+      if (state.closed) { log('Phòng khám đã đóng — mở phòng trước khi tạm dừng khám'); return; }
       state.paused = !state.paused;
       // CHỤP GIỜ MÁY đúng thời điểm bấm nút. Không có timer chạy liên
       // tục: mốc này đứng yên cho đến lần bấm tiếp theo.
@@ -339,6 +410,17 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       log(state.paused ? 'Bác sĩ tạm dừng khám' : 'Bác sĩ tiếp tục khám');
       tick();
     };
+    // NÚT DƯỚI CÙNG: đóng / mở phòng khám (trạng thái thứ 3).
+    // Bấm nút này KHÔNG đổi mốc giờ của lần Tạm dừng / Tiếp tục trước đó.
+    $('btnRoom').onclick = () => {
+      state.closed = !state.closed;
+      if (state.closed) {
+        state.paused = false;
+        state.actionMessage = null;
+      }
+      log(state.closed ? 'Đã đóng phòng khám — khoá thao tác gọi số' : 'Đã mở lại phòng khám');
+      tick();
+    };
     $('btnOffline').onclick = () => {
       state.feed = state.feed === 'error' ? 'live' : 'error';
       $('btnOffline').textContent = state.feed === 'error' ? 'Kết nối lại' : 'Mất kết nối';
@@ -348,7 +430,7 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
     $('btnReset').onclick = () => {
       Object.assign(state, {
         waiting: [], current: 0, next: 0, lastIssued: 0,
-        paused: false, feed: 'live',
+        paused: false, closed: false, feed: 'live',
         lastActionAt: null, lastActionLabel: '', actionMessage: null,
       });
       $('btnPause').textContent = 'Tạm dừng khám';
@@ -361,12 +443,12 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
 
     // Tự phát sự kiện để thấy thẻ đổi nội dung mà không cần bấm nút.
     setInterval(() => {
-      if (state.auto && !document.hidden && state.feed !== 'error') {
+      if (state.auto && !document.hidden && state.feed !== 'error' && !state.closed) {
         addAppointment(false);
       }
     }, 6000);
 
-    log('Sẵn sàng: chưa có mốc giờ — bấm Tạm dừng / Tiếp tục khám để chụp giờ máy');
+    log('Sẵn sàng: Đang khám. Bấm Tạm dừng / Tiếp tục để chụp giờ; nút dưới cùng đóng/mở phòng');
   </script>
 </body>
 </html>

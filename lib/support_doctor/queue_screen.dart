@@ -497,6 +497,10 @@ class _QueueScreenState extends State<QueueScreen> {
 
   int? selected;
   bool paused = false;
+
+  /// Phòng đã đóng (nút dưới cùng). Khi đóng, mọi thao tác gọi số bị khoá
+  /// và thẻ thông báo chuyển sang trạng thái "đóng phòng khám".
+  bool closed = false;
   String? message;
 
   /// Trạng thái luồng dữ liệu realtime. Thẻ thông báo dùng giá trị này để
@@ -566,6 +570,7 @@ class _QueueScreenState extends State<QueueScreen> {
         ..addAll(snapshot.deferredAppointmentIdByNumber);
       _daBatDau = snapshot.daBatDau || snapshot.current > 0;
       paused = snapshot.paused;
+      closed = snapshot.closed;
       // Mốc giờ của lần bấm Tạm dừng / Tiếp tục vẫn đứng yên khi rời
       // phòng rồi mở lại trong cùng phiên chạy app.
       _lastStatusChangeAt = snapshot.statusChangedAt;
@@ -648,6 +653,7 @@ class _QueueScreenState extends State<QueueScreen> {
         _maLichHenDaChoQua,
       )
       ..paused = paused
+      ..closed = closed
       ..statusChangedAt = _lastStatusChangeAt
       ..statusChangeLabel = _lastStatusChangeLabel
       ..examinedNumbers = <int>[
@@ -815,13 +821,15 @@ class _QueueScreenState extends State<QueueScreen> {
         ..addAll(result.scheduledInserts);
       lastIssued = result.lastIssued;
       if (selected != null && !waiting.contains(selected)) selected = null;
-      if (wasEmpty && current > 0) {
+      // Phòng đã đóng: giữ nguyên thông báo "đóng phòng", không ghi đè
+      // bằng các lời nhắn nạp số từ luồng realtime.
+      if (!closed && wasEmpty && current > 0) {
         message = next > 0
             ? 'Đã nạp số thứ tự từ lịch hẹn đã xác nhận.\n'
                   'Bệnh nhân số $current đang khám; số $next là số tiếp theo.'
             : 'Đã nạp số thứ tự từ lịch hẹn đã xác nhận.\n'
                   'Bệnh nhân số $current đang khám.';
-      } else if (wasEmpty && !_daBatDau && waiting.isNotEmpty) {
+      } else if (!closed && wasEmpty && !_daBatDau && waiting.isNotEmpty) {
         message =
             'Đã nạp ${waiting.length} số từ lịch hẹn đã xác nhận.\n'
             'Số bắt đầu là 0 – nhấn “Bắt đầu” để gọi số ${waiting.first}.';
@@ -910,6 +918,11 @@ class _QueueScreenState extends State<QueueScreen> {
   }
 
   String get _defaultStatusMessage {
+    if (closed) {
+      return 'Phòng khám đã đóng.\n'
+          'Không gọi số mới cho đến khi bác sĩ mở lại phòng.\n'
+          'Nhấn “Mở phòng khám” ở nút dưới cùng để tiếp tục.';
+    }
     if (paused) {
       final mocGio = _lastStatusChangeAt == null
           ? ''
@@ -977,6 +990,10 @@ class _QueueScreenState extends State<QueueScreen> {
   /// Nút "Tiếp theo" (đã gộp với "Xác nhận khám"): xác nhận số hiện tại đã
   /// khám xong rồi gọi số kế tiếp trong một lần bấm.
   void callNext() {
+    if (closed) {
+      notify('Phòng khám đã đóng. Nhấn “Mở phòng khám” để tiếp tục.');
+      return;
+    }
     if (paused) {
       notify('Vui lòng tiếp tục khám trước khi gọi số.');
       return;
@@ -1120,6 +1137,10 @@ class _QueueScreenState extends State<QueueScreen> {
   ///
   /// Nếu số đó vẫn còn có lượt trong hàng chờ, số đó cũng bị bỏ khỏi hàng chờ.
   Future<void> markCurrentAbsent() async {
+    if (closed) {
+      notify('Phòng khám đã đóng. Nhấn “Mở phòng khám” để tiếp tục.');
+      return;
+    }
     if (paused) {
       notify('Vui lòng tiếp tục khám trước khi cập nhật lượt.');
       return;
@@ -1282,6 +1303,10 @@ class _QueueScreenState extends State<QueueScreen> {
   /// nút "+ Chèn" để đưa số đó trở lại hàng chờ tại vị trí mong muốn;
   /// lúc số thực sự vào lại hàng chờ, lịch hẹn được báo về `2`.
   void deferNumber(int number) {
+    if (closed) {
+      notify('Phòng khám đã đóng. Nhấn “Mở phòng khám” để tiếp tục.');
+      return;
+    }
     if (paused) {
       notify('Vui lòng tiếp tục khám trước khi đổi lượt.');
       return;
@@ -1365,6 +1390,10 @@ class _QueueScreenState extends State<QueueScreen> {
   /// số đang khám cũ lùi về "SỐ TIẾP THEO"; số kế tiếp cũ (chưa được gọi) quay
   /// trở lại đầu hàng chờ để không bị mất lượt.
   void recallNumber(int picked) {
+    if (closed) {
+      notify('Phòng khám đã đóng. Nhấn “Mở phòng khám” để tiếp tục.');
+      return;
+    }
     if (paused) {
       notify('Vui lòng tiếp tục khám trước khi gọi lại số.');
       return;
@@ -2310,27 +2339,36 @@ class _QueueScreenState extends State<QueueScreen> {
                                     : Icons.pause_circle_filled_rounded,
                                 iconLeading: true,
                                 color: paused ? _Ui.green : Colors.white,
-                                onPressed: () => setState(() {
-                                  paused = !paused;
-                                  // Chụp GIỜ MÁY đúng thời điểm bấm nút.
-                                  // Không có timer chạy liên tục: mốc này
-                                  // đứng yên cho đến lần bấm tiếp theo.
-                                  final mocGio = DateTime.now();
-                                  final gio = formatMayGio(mocGio);
-                                  _lastStatusChangeAt = mocGio;
-                                  _lastStatusChangeLabel = paused
-                                      ? 'Tạm dừng lúc'
-                                      : 'Tiếp tục lúc';
-                                  message = paused
-                                      ? 'Bác sĩ tạm dừng khám lúc $gio.\n'
-                                            'Việc gọi số tiếp theo tạm thời bị dừng.\n'
-                                            'Vui lòng chờ đến khi bác sĩ tiếp tục khám.'
-                                      : 'Bác sĩ tiếp tục khám lúc $gio.\n'
-                                            'Số thứ tự được gọi lại bình thường.';
-                                  // Cập nhật ngay trạng thái phòng cho trang chính:
-                                  // chỉ khi bấm nút này phòng mới hiện "Tạm dừng".
-                                  _syncRoomState();
-                                }),
+                                onPressed: () {
+                                  if (closed) {
+                                    notify(
+                                      'Phòng khám đã đóng. Mở phòng trước khi '
+                                      'tạm dừng khám.',
+                                    );
+                                    return;
+                                  }
+                                  setState(() {
+                                    paused = !paused;
+                                    // Chụp GIỜ MÁY đúng thời điểm bấm nút.
+                                    // Không có timer chạy liên tục: mốc này
+                                    // đứng yên cho đến lần bấm tiếp theo.
+                                    final mocGio = DateTime.now();
+                                    final gio = formatMayGio(mocGio);
+                                    _lastStatusChangeAt = mocGio;
+                                    _lastStatusChangeLabel = paused
+                                        ? 'Tạm dừng lúc'
+                                        : 'Tiếp tục lúc';
+                                    message = paused
+                                        ? 'Bác sĩ tạm dừng khám lúc $gio.\n'
+                                              'Việc gọi số tiếp theo tạm thời bị dừng.\n'
+                                              'Vui lòng chờ đến khi bác sĩ tiếp tục khám.'
+                                        : 'Bác sĩ tiếp tục khám lúc $gio.\n'
+                                              'Số thứ tự được gọi lại bình thường.';
+                                    // Cập nhật ngay trạng thái phòng cho trang chính:
+                                    // chỉ khi bấm nút này phòng mới hiện "Tạm dừng".
+                                    _syncRoomState();
+                                  });
+                                },
                               ),
                             ),
                           ],
@@ -2338,6 +2376,7 @@ class _QueueScreenState extends State<QueueScreen> {
                         const SizedBox(height: 16),
                         _StatusBanner(
                           paused: paused,
+                          closed: closed,
                           message: message ?? _defaultStatusMessage,
                           // Footer CHỈ hiện mốc giờ chụp lúc bấm
                           // Tạm dừng / Tiếp tục khám, không chạy liên tục.
@@ -2345,10 +2384,42 @@ class _QueueScreenState extends State<QueueScreen> {
                             prefix:
                                 '${widget.roomName} · ${widget.departmentName}',
                             paused: paused,
+                            closed: closed,
                             feedState: _feedState,
                             statusChangedAt: _lastStatusChangeAt,
                             statusChangeLabel: _lastStatusChangeLabel,
                           ),
+                        ),
+                        // NÚT DƯỚI CÙNG: đóng / mở phòng khám, nằm ngay
+                        // dưới thẻ "Thông báo từ Bác sĩ".
+                        const SizedBox(height: 12),
+                        _ActionButton(
+                          label: closed ? 'Mở phòng khám' : 'Đóng phòng khám',
+                          icon: closed
+                              ? Icons.lock_open_rounded
+                              : Icons.lock_outline_rounded,
+                          iconLeading: true,
+                          color: closed ? _Ui.green : Colors.white,
+                          danger: !closed,
+                          onPressed: () {
+                            final seDong = !closed;
+                            setState(() {
+                              closed = seDong;
+                              // Đóng phòng là trạng thái cuối buổi, không
+                              // chồng thêm trạng thái "Tạm dừng".
+                              if (closed) paused = false;
+                              // Bấm Đóng / Mở KHÔNG đổi mốc giờ của lần
+                              // Tạm dừng / Tiếp tục khám trước đó.
+                              message = null;
+                              _syncRoomState();
+                            });
+                            notify(
+                              seDong
+                                  ? 'Đã đóng phòng khám. Các thao tác gọi số '
+                                        'tạm bị khoá.'
+                                  : 'Đã mở lại phòng khám.',
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -3841,125 +3912,191 @@ class _AbsentChip extends StatelessWidget {
   );
 }
 
-/// Thẻ thông báo từ bác sĩ: xanh khi đang khám, kem + icon cam khi tạm dừng.
+/// Bảng màu + nội dung của thẻ thông báo theo 3 trạng thái phòng:
+/// Đang khám (xanh) · Tạm dừng (kem/cam) · Đóng phòng (đỏ nhạt).
+class _BannerStyle {
+  const _BannerStyle({
+    required this.heading,
+    required this.icon,
+    required this.background,
+    required this.border,
+    required this.shadow,
+    required this.halo,
+    required this.accent,
+    required this.title,
+    required this.body,
+    required this.footer,
+    required this.dot,
+  });
+
+  final String heading;
+  final IconData icon;
+  final Color background;
+  final Color border;
+  final Color shadow;
+  final Color halo;
+  final Color accent;
+  final Color title;
+  final Color body;
+  final Color footer;
+  final Color dot;
+
+  factory _BannerStyle.of({required bool paused, required bool closed}) {
+    if (closed) {
+      return const _BannerStyle(
+        heading: 'Thông báo đóng phòng khám',
+        icon: Icons.close_rounded,
+        background: Color(0xFFFFF1F0),
+        border: Color(0xFFFFD9D6),
+        shadow: Color(0x1FE5484D),
+        halo: Color(0x2EE5484D),
+        accent: Color(0xFFE5484D),
+        title: Color(0xFF7A1D1D),
+        body: Color(0xFF8A4B45),
+        footer: Color(0xFFB5807A),
+        dot: Color(0xFFD9A8A2),
+      );
+    }
+    if (paused) {
+      return const _BannerStyle(
+        heading: 'Thông báo tạm dừng khám',
+        icon: Icons.pause_rounded,
+        background: Color(0xFFFFF8E8),
+        border: Color(0xFFFFE6BC),
+        shadow: Color(0x1FF5A623),
+        halo: Color(0x2EF5A623),
+        accent: Color(0xFFF5A623),
+        title: Color(0xFF6B4A00),
+        body: Color(0xFF8A6A2F),
+        footer: Color(0xFFB08F4E),
+        dot: Color(0xFFC9A96A),
+      );
+    }
+    return const _BannerStyle(
+      heading: 'Thông báo từ Bác sĩ',
+      icon: Icons.check_rounded,
+      background: Color(0xFFEAF9F0),
+      border: Color(0xFFCFF0DC),
+      shadow: Color(0x1F2AC653),
+      halo: Color(0x2E2AC653),
+      accent: Color(0xFF2AC653),
+      title: Color(0xFF14532C),
+      body: Color(0xFF38624A),
+      footer: Color(0xFF8AA79A),
+      dot: Color(0xFF7FAE92),
+    );
+  }
+}
+
+/// Thẻ thông báo từ bác sĩ: xanh khi đang khám, kem + icon cam khi tạm
+/// dừng, đỏ nhạt + icon đóng khi phòng khám đã đóng.
 class _StatusBanner extends StatelessWidget {
   const _StatusBanner({
     required this.paused,
+    required this.closed,
     required this.message,
     required this.footer,
   });
 
   final bool paused;
+  final bool closed;
   final String message;
 
-  /// Dòng chân thẻ. Là [Widget] thay vì [String] vì đồng hồ giờ máy cần
-  /// tự nhảy mỗi giây mà không kéo theo việc vẽ lại toàn bộ màn hình.
+  /// Dòng chân thẻ. Là [Widget] để footer tự quyết nội dung (mốc giờ
+  /// chụp lúc bấm nút + trạng thái luồng dữ liệu) mà không cần rebuild
+  /// cả màn hình hàng chờ.
   final Widget footer;
 
   @override
-  Widget build(BuildContext context) => AnimatedContainer(
-    duration: const Duration(milliseconds: 260),
-    curve: Curves.easeOut,
-    padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-    decoration: BoxDecoration(
-      color: paused ? const Color(0xFFFFF8E8) : const Color(0xFFEAF9F0),
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(
-        color: paused ? const Color(0xFFFFE6BC) : const Color(0xFFCFF0DC),
+  Widget build(BuildContext context) {
+    final style = _BannerStyle.of(paused: paused, closed: closed);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        color: style.background,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: style.border),
+        boxShadow: [
+          BoxShadow(
+            color: style.shadow,
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      boxShadow: [
-        BoxShadow(
-          color: paused ? const Color(0x1FF5A623) : const Color(0x1F2AC653),
-          blurRadius: 20,
-          offset: const Offset(0, 10),
-        ),
-      ],
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(3.5),
-          decoration: BoxDecoration(
-            color: paused ? const Color(0x2EF5A623) : const Color(0x2E2AC653),
-            shape: BoxShape.circle,
-          ),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: paused ? const Color(0xFFF5A623) : const Color(0xFF2AC653),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              paused ? Icons.pause_rounded : Icons.check_rounded,
-              color: Colors.white,
-              size: 22,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3.5),
+            decoration: BoxDecoration(color: style.halo, shape: BoxShape.circle),
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: style.accent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(style.icon, color: Colors.white, size: 22),
             ),
           ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                paused ? 'Thông báo tạm dừng khám' : 'Thông báo từ Bác sĩ',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
-                  color: paused
-                      ? const Color(0xFF6B4A00)
-                      : const Color(0xFF14532C),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                message,
-                style: TextStyle(
-                  fontSize: 12.2,
-                  height: 1.55,
-                  color: paused
-                      ? const Color(0xFF8A6A2F)
-                      : const Color(0xFF38624A),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: paused
-                          ? const Color(0xFFC9A96A)
-                          : const Color(0xFF7FAE92),
-                      shape: BoxShape.circle,
-                    ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  style.heading,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: style.title,
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: DefaultTextStyle(
-                      style: TextStyle(
-                        fontSize: 10.3,
-                        fontWeight: FontWeight.w500,
-                        color: paused
-                            ? const Color(0xFFB08F4E)
-                            : const Color(0xFF8AA79A),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 12.2,
+                    height: 1.55,
+                    color: style.body,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: style.dot,
+                        shape: BoxShape.circle,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      child: footer,
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: DefaultTextStyle(
+                        style: TextStyle(
+                          fontSize: 10.3,
+                          fontWeight: FontWeight.w500,
+                          color: style.footer,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        child: footer,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 /// Định dạng `HH:mm:ss` theo giờ địa phương của MÁY đang chạy app.
@@ -3979,11 +4116,12 @@ String formatMayGio(DateTime time) {
 /// cả khi luồng lịch hẹn realtime vẫn tiếp tục cập nhật nội dung thẻ.
 /// Khi chưa bấm nút nào, footer chỉ hiện tên phòng/khoa và trạng thái
 /// của luồng dữ liệu (`Giờ máy` / `Đang kết nối…` / `Realtime` /
-/// `Mất kết nối`).
+/// `Mất kết nối`). Khi phòng đã đóng, footer thêm nhãn `Đã đóng phòng`.
 class _LiveStatusFooter extends StatelessWidget {
   const _LiveStatusFooter({
     required this.prefix,
     required this.paused,
+    required this.closed,
     required this.feedState,
     required this.statusChangedAt,
     required this.statusChangeLabel,
@@ -3992,6 +4130,7 @@ class _LiveStatusFooter extends StatelessWidget {
   /// "Tên phòng · Tên khoa" lấy từ phòng bác sĩ đang mở.
   final String prefix;
   final bool paused;
+  final bool closed;
   final QueueFeedState feedState;
 
   /// `null` khi phòng hôm nay chưa bấm Tạm dừng / Tiếp tục lần nào.
@@ -3999,7 +4138,9 @@ class _LiveStatusFooter extends StatelessWidget {
   final String statusChangeLabel;
 
   ({String label, Color color}) get _feedBadge {
-    final neutral = paused
+    final neutral = closed
+        ? const Color(0xFFB5807A)
+        : paused
         ? const Color(0xFFB08F4E)
         : const Color(0xFF8AA79A);
     return switch (feedState) {
@@ -4029,6 +4170,14 @@ class _LiveStatusFooter extends StatelessWidget {
         style: baseStyle,
         children: <InlineSpan>[
           TextSpan(text: '$prefix · '),
+          if (closed)
+            TextSpan(
+              text: 'Đã đóng phòng · ',
+              style: baseStyle.copyWith(
+                color: const Color(0xFFC23B3B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           if (mocGio != null)
             TextSpan(
               text: '${formatMayGio(mocGio)} · $statusChangeLabel · ',
