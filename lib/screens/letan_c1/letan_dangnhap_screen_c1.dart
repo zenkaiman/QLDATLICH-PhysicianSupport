@@ -4,6 +4,7 @@ import '../../config/app_session.dart';
 import '../../models/letan_c1/letan_design_system_c1.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
 import '../../services/letan_c1/letan_firebase_service_c1.dart';
+import '../../services/hospital_access_service.dart';
 import '../../utils/role_helper.dart';
 import 'cskh_duyetdon_khoa_screen_c1.dart';
 import 'letan_thietlap_thongtin_screen_c1.dart';
@@ -67,6 +68,33 @@ class _LetanDangnhapScreenC1State extends State<LetanDangnhapScreenC1> {
         taiKhoanHoacEmail: input,
         matKhau: pass,
       );
+
+      // ✅ KIỂM TRA BỆNH VIỆN CÒN HỢP TÁC trước khi lưu phiên / vào
+      // bàn làm việc: `trang_thai_hop_tac_id` phải đúng 10.
+      final maNvKiemTra = (user?['ma_nhan_vien'] ??
+              user?['ma_tai_khoan'] ??
+              input)
+          .toString();
+      var bvIdKiemTra = (user?['benh_vien_id'] ??
+              user?['ma_benh_vien'] ??
+              user?['benhVienId'] ??
+              '')
+          .toString()
+          .trim();
+      if (bvIdKiemTra.isEmpty) {
+        bvIdKiemTra = FirebaseServiceC1.benhVienIdTuDuongDan(
+          (user?['docPath'] ?? '').toString(),
+        );
+      }
+      if (bvIdKiemTra.isEmpty) {
+        bvIdKiemTra = FirebaseServiceC1.benhVienIdTuMaNhanVien(maNvKiemTra);
+      }
+      final ketQuaBv = await HospitalAccessService().kiemTra(bvIdKiemTra);
+      if (!ketQuaBv.hopLe) {
+        if (!mounted) return;
+        await HospitalAccessService().tuDongDangXuat(context, ketQuaBv);
+        return;
+      }
 
       // Lưu phiên nếu người dùng tích chọn Ghi nhớ
       if (_ghiNhoDangNhap) {

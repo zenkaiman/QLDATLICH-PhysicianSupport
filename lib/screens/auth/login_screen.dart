@@ -13,6 +13,7 @@ import '../../support_doctor/clinic_firestore_service.dart';
 import '../../support_doctor/department_room_picker.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
 import '../../services/letan_c1/letan_firebase_service_c1.dart';
+import '../../services/hospital_access_service.dart';
 import '../../utils/role_helper.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -38,6 +39,26 @@ class _LoginScreenState extends State<LoginScreen> {
     {'name': 'Bệnh viện', 'icon': Icons.local_hospital, 'code': 'benh_vien'},
     {'name': 'Admin', 'icon': Icons.admin_panel_settings, 'code': 'admin'},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Thông báo "bệnh viện không tồn tại / đã ngừng hợp tác" được lưu
+    // tạm trong service vì Scaffold cũ bị huỷ lúc tự động đăng xuất.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final thongBao = HospitalAccessService.thongBaoSauDangXuat;
+      if (thongBao == null || !mounted) return;
+      HospitalAccessService.thongBaoSauDangXuat = null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(thongBao),
+          backgroundColor: _danger,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -111,6 +132,18 @@ class _LoginScreenState extends State<LoginScreen> {
           if (bvId.isEmpty) {
             bvId = FirebaseServiceC1.benhVienIdTuMaNhanVien(maNvThucTe);
           }
+
+          // ✅ KIỂM TRA BỆNH VIỆN CÒN HỢP TÁC:
+          // `BenhVien/{bvId}.trang_thai_hop_tac_id` phải đúng 10. Nếu khác
+          // (hoặc không có document/trường) -> hiện thông báo rồi TỰ ĐỘNG
+          // đăng xuất, KHÔNG lưu phiên và KHÔNG vào màn theo vai trò.
+          final ketQuaBv = await HospitalAccessService().kiemTra(bvId);
+          if (!ketQuaBv.hopLe) {
+            if (!mounted) return;
+            await HospitalAccessService().tuDongDangXuat(context, ketQuaBv);
+            return;
+          }
+
           final tenBv = (nhanVienData['ten_benh_vien'] ?? 'Bệnh viện Quân y 17')
               .toString();
 

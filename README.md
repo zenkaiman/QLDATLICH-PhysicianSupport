@@ -86,3 +86,35 @@ nội dung thẻ đổi realtime. Riêng giờ chỉ xuất hiện/đổi khi b�
 Với app Flutter thật: `flutter run -d chrome` (hoặc `-d windows` / `-d macos` /
 `-d linux`) rồi đăng nhập vai trò bác sĩ → chọn phòng → bấm Tạm dừng khám để
 thấy mốc giờ máy trên thẻ.
+
+## Chặn đăng nhập khi bệnh viện ngừng hợp tác
+
+`lib/services/hospital_access_service.dart` đọc document `BenhVien/{benhVienId}`
+và chỉ cho vào khi `trang_thai_hop_tac_id == 10`. Chấp nhận cả số `10` lẫn
+chuỗi `"10"` và các biến thể tên trường (`trangThaiHopTacId`,
+`trang_thai_hop_tac`, `trangThaiHopTac`).
+
+| Trường hợp | Kết quả |
+| --- | --- |
+| Có document, trạng thái `10` | Đăng nhập bình thường |
+| Không có document / không suy ra được `benhVienId` / thiếu trường trạng thái | `Bệnh viện không tồn tại hoặc tài khoản không thuộc bệnh viện nào.` |
+| Trạng thái khác `10` | `Bệnh viện đã ngừng hợp tác (trạng thái …). Vui lòng liên hệ quản trị.` |
+| Lỗi đọc Firestore (mất mạng, không có quyền) | `Không kiểm tra được thông tin bệnh viện. Vui lòng thử lại.` |
+
+Mọi trường hợp không hợp lệ đều: **không lưu phiên ghi nhớ đăng nhập**, hiện
+thông báo trên màn hình đăng nhập rồi **tự động đăng xuất**
+(`AuthProvider.logout()` → `FirebaseAuth.signOut()`,
+`FirebaseServiceC1.xoaPhienDangNhap()`, xoá định danh bệnh nhân, đẩy về
+`/login`). Kiểm tra được chèn **trước** khi điều hướng theo vai trò ở cả hai
+màn đăng nhập nhân viên: `screens/auth/login_screen.dart` và
+`screens/letan_c1/letan_dangnhap_screen_c1.dart` (kể cả luồng tự động đăng
+nhập lại từ phiên đã lưu).
+
+> Dữ liệu cũ chưa có trường `trang_thai_hop_tac_id`: mặc định fail-closed
+> (chặn). Đặt `HospitalAccessService.coiThieuTruongLaKhongHopLe = false;`
+> trong `main()` nếu muốn tạm cho đăng nhập.
+
+Phạm vi hiện tại: 2 luồng đăng nhập **nhân viên y tế** (bác sĩ / lễ tân /
+CSKH), vì chỉ các luồng này suy ra được `benhVienId` từ document `NhanVien`.
+Tab Bệnh viện / Bệnh nhân / Admin chưa có mã bệnh viện khi đăng nhập nên chưa
+áp dụng.
