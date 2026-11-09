@@ -53,6 +53,23 @@ Thẻ ở `lib/support_doctor/queue_screen.dart` (`_StatusBanner`) không còn �
   `setState` do `watchAppointmentQueue()` phát ra, nên STT / tên bệnh nhân /
   trạng thái realtime đổi ngay khi dữ liệu Firebase đổi — chỉ phần giờ là đứng yên.
 
+### 3 trạng thái phòng + nút Đóng / Mở phòng khám
+
+`RoomRuntimeStatus` (`lib/support_doctor/room_session_store.dart`) nay có đủ
+`open` / `paused` / `closed`, độ ưu tiên **Đóng > Tạm dừng > Đang khám**:
+
+- `_QueueScreenState.closed` được lưu/khôi phục cùng `RoomSessionSnapshot`,
+  nên màn hình chọn khoa/phòng hiện nhãn `Đã đóng` và lọc đúng nhóm phòng.
+- **Nút dưới cùng**, ngay dưới thẻ thông báo: `Đóng phòng khám` ↔
+  `Mở phòng khám` (`_ActionButton`, khoá các thao tác gọi số / xác nhận
+  vắng mặt / đổi lượt / gọi lại số khi phòng đóng).
+- Thẻ thông báo có bảng màu riêng cho 3 trạng thái (`_BannerStyle`): xanh /
+  kem-cam / đỏ nhạt, kèm tiêu đề `Thông báo đóng phòng khám`; footer thêm
+  nhãn `Đã đóng phòng`.
+- Bấm Đóng / Mở **không đổi mốc giờ** của lần Tạm dừng / Tiếp tục khám
+  (đúng yêu cầu "chỉ hiện thời gian lúc ấn tạm dừng và tiếp tục khám").
+- Phòng đã đóng vẫn bấm được từ màn hình chọn phòng để vào trong và mở lại.
+
 ### Xem thử ngay trên máy (không cần Flutter SDK / Firebase)
 
 ```bash
@@ -61,9 +78,10 @@ cd web && python3 -m http.server 8000 --bind 0.0.0.0
 ```
 
 Trang `web/status_banner_realtime.html` dựng lại đúng thẻ trong thiết kế, có
-nút mô phỏng "duyệt lịch hẹn", "Tiếp theo", "Tạm dừng khám", "Mất kết nối" và
-tự phát sự kiện mỗi 6 giây để thấy nội dung thẻ đổi realtime. Riêng giờ chỉ
-xuất hiện/đổi khi bấm **Tạm dừng / Tiếp tục khám** (không tick theo giây).
+nút mô phỏng "duyệt lịch hẹn", "Tiếp theo", "Tạm dừng khám", "Mất kết nối",
+nút **Đóng / Mở phòng khám** ở dưới cùng và tự phát sự kiện mỗi 6 giây để thấy
+nội dung thẻ đổi realtime. Riêng giờ chỉ xuất hiện/đổi khi bấm
+**Tạm dừng / Tiếp tục khám** (không tick theo giây).
 
 Với app Flutter thật: `flutter run -d chrome` (hoặc `-d windows` / `-d macos` /
 `-d linux`) rồi đăng nhập vai trò bác sĩ → chọn phòng → bấm Tạm dừng khám để
