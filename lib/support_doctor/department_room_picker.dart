@@ -447,17 +447,17 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
       (_RoomFilter.all, 'Tất cả', _departmentRooms.length),
       (
         _RoomFilter.open,
-        '${kRoomStatusLabels[kRoomStatusOpenId]} ($kRoomStatusOpenId)',
+        ClinicRoomStatus.open.fullLabel,
         _departmentRooms.where(widget.isOpen).length,
       ),
       (
         _RoomFilter.paused,
-        '${kRoomStatusLabels[kRoomStatusPausedId]} ($kRoomStatusPausedId)',
+        ClinicRoomStatus.paused.fullLabel,
         _departmentRooms.where(widget.isPaused).length,
       ),
       (
         _RoomFilter.closed,
-        '${kRoomStatusLabels[kRoomStatusClosedId]} ($kRoomStatusClosedId)',
+        ClinicRoomStatus.closed.fullLabel,
         _departmentRooms.where(widget.isClosed).length,
       ),
     ];
@@ -1095,7 +1095,7 @@ class _PickerMeta extends StatelessWidget {
 enum ClinicRoomStatus { open, paused, closed }
 
 extension ClinicRoomStatusLabel on ClinicRoomStatus {
-  /// Nhãn ngắn gọn trên thẻ phòng (dữ liệu cũ chưa có `trang_thai_id`).
+  /// Nhãn ngắn, giữ để tương thích mã cũ; giao diện hiện dùng [fullLabel].
   String get label => switch (this) {
     ClinicRoomStatus.open => 'Đang khám',
     ClinicRoomStatus.paused => 'Tạm dừng',
@@ -1148,23 +1148,18 @@ class ClinicRoomData {
 
   /// Id trạng thái sau khi đối chiếu 4 field trong `PhongKham/{id}`
   /// (12 tạm dừng / 13 đang khám / 14 đóng phòng), ưu tiên field số.
-  /// `null` khi document chưa có field hợp lệ — lúc đó dùng trạng thái
-  /// phiên trong [RoomSessionStore] như cũ.
+  /// **Không hiển thị trên giao diện**, chỉ dùng nội bộ. `null` khi
+  /// document chưa có field hợp lệ — lúc đó dùng trạng thái phiên trong
+  /// [RoomSessionStore] như cũ.
   final int? trangThaiId;
   final int? currentNumber;
   final int waitingCount;
   final int examinedCount;
 
-  /// Nhãn hiện trong bảng trạng thái phòng khám. Khi đối chiếu được id
-  /// từ 4 field Firestore thì hiện đúng nhãn 12/13/14 kèm mã.
-  String get statusLabel {
-    final id = trangThaiId;
-    if (id == null) return status.label;
-    final mapped = kRoomStatusLabels[id];
-    return mapped == null
-        ? '${status.label} · $id'
-        : '$mapped · $id';
-  }
+  /// Nhãn hiện trong bảng trạng thái phòng khám: **chỉ tên trạng thái**,
+  /// không kèm `trang_thai_id`. Id vẫn được giữ nội bộ để đối chiếu 4
+  /// field Firestore và quyết định Firestore/local precedence.
+  String get statusLabel => status.fullLabel;
 
   /// Bản sao có cập nhật trạng thái/số liệu theo thời gian chạy.
   ClinicRoomData copyWith({

@@ -153,18 +153,20 @@ Giá trị chuẩn của `trang_thai` chỉ là 3 từ `tam_dung` / `kham` / `do
   `trangThaiId` / `trangThai`, không xoá `hospitalId`, `khoaId`,
   `ten_phong` … đang có.
 - Khi document có field, **Firestore là nguồn sự thật**: màn hình chọn
-  khoa/phòng hiện nhãn đầy đủ kèm mã (`Tạm dừng khám · 12` …), chip lọc
-  `Đang khám (13)` / `Tạm dừng khám (12)` / `Đóng phòng khám (14)` và không
-  để trạng thái phiên local ghi đè lên.
+  khoa/phòng và chip lọc **chỉ hiện tên trạng thái** (`Tạm dừng khám`,
+  `Đang khám`, `Đóng phòng khám`), **không kèm `12/13/14`**. Id vẫn được
+  giữ nội bộ để đối chiếu 4 field và không để trạng thái phiên local ghi
+  đè lên.
 - Trên `QueueScreen`, bấm **Tạm dừng khám** ghi `12` + `tam_dung`,
   **Tiếp tục khám** / **Mở phòng khám** ghi `13` + `kham`,
   **Đóng phòng khám** ghi `14` + `dong` vào 2 field snake_case.
   Trạng thái từ thiết bị khác cũng cập nhật banner/nút ngay qua stream.
   Thay đổi từ Firestore **không chụp lại giờ máy**: mốc `HH:mm:ss` vẫn chỉ
   đổi khi bấm Tạm dừng / Tiếp tục trên chính thiết bị đó.
-- Thay đổi này **chỉ ở tầng Firebase**: không thêm cột/bảng UI, không đổi
-  chip lọc, thẻ phòng hay banner. `web/status_banner_realtime.html` vẫn giữ
-  bảng 12/13/14 và tô dòng đang áp dụng như trước.
+- Phần đọc/ghi 4 field vẫn **chỉ ở tầng Firebase**. Trên giao diện, chip
+  lọc, thẻ phòng, banner và `web/status_banner_realtime.html` **chỉ hiện
+  trạng thái, không hiện id**; bản preview vẫn tô dòng trạng thái đang áp
+  dụng bằng id nội bộ.
 
 ### Bổ sung field cho document phòng đã có
 
