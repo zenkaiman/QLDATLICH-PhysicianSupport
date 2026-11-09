@@ -33,3 +33,35 @@ Thông báo gắn `vai_tro_nhan = 'benh_nhan'` kèm `nguoi_nhan_id`, `benh_nhan_
 
 > Khi chạy thật, đặt `PatientNotificationService.cheDoXemThuKhiChuaDangNhap = false`
 > để mỗi bệnh nhân chỉ thấy thông báo của chính mình.
+
+## Thẻ "Thông báo từ Bác sĩ" chạy realtime trên máy
+
+Thẻ ở `lib/support_doctor/queue_screen.dart` (`_StatusBanner`) không còn để cứng
+`08:42` nữa:
+
+- `_LiveStatusFooter` lấy `DateTime.now()` — **giờ địa phương của máy đang chạy
+  app** — và tự nhảy mỗi giây bằng `Timer.periodic`. Chỉ dòng footer nhỏ này
+  vẽ lại, không rebuild cả màn hình hàng chờ. Khi app nằm nền rồi mở lại,
+  `WidgetsBindingObserver` cập nhật giờ ngay lập tức.
+- Cạnh đồng hồ là trạng thái của luồng dữ liệu (`QueueFeedState`):
+  `Giờ máy` (không có stream), `Đang kết nối…`, `Realtime` (đã nhận lịch hẹn
+  từ Firestore `snapshots()`), `Mất kết nối` (stream báo lỗi).
+- Nội dung thẻ (`_defaultStatusMessage`) vốn đã được tính lại ở mỗi đợt
+  `setState` do `watchAppointmentQueue()` phát ra, nên STT / tên bệnh nhân /
+  trạng thái tạm dừng đổi ngay khi dữ liệu trên Firebase đổi.
+
+### Xem thử ngay trên máy (không cần Flutter SDK / Firebase)
+
+```bash
+cd web && python3 -m http.server 8000 --bind 0.0.0.0
+# mở http://localhost:8000/status_banner_realtime.html
+```
+
+Trang `web/status_banner_realtime.html` dựng lại đúng thẻ trong thiết kế, đồng
+hồ chạy theo giờ trình duyệt/máy, có nút mô phỏng "duyệt lịch hẹn", "Tiếp
+theo", "Tạm dừng khám", "Mất kết nối" và tự phát sự kiện mỗi 6 giây để thấy
+thẻ đổi nội dung realtime.
+
+Với app Flutter thật: `flutter run -d chrome` (hoặc `-d windows` / `-d macos` /
+`-d linux`) rồi đăng nhập vai trò bác sĩ → chọn phòng → thẻ hiện giờ máy và
+nhãn `Realtime` khi đã nhận được dữ liệu `LichHen` của phòng hôm nay.

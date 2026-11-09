@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -45,6 +45,23 @@ typedef AppointmentSyncResult = ({
   List<InsertResult> scheduledInserts,
   int lastIssued,
 });
+
+/// Trạng thái của nguồn dữ liệu thời gian thực (luồng lịch hẹn) để thẻ
+/// "Thông báo từ Bác sĩ" cho biết thẻ đang chạy realtime hay chỉ chạy
+/// bằng dữ liệu/giờ của chính máy.
+enum QueueFeedState {
+  /// Không có luồng lịch hẹn (chế độ demo/offline): vẫn hiện giờ máy.
+  local,
+
+  /// Đã đăng ký nghe luồng nhưng chưa nhận được đợt cập nhật đầu tiên.
+  connecting,
+
+  /// Đang nhận cập nhật STT từ Firebase theo thời gian thực.
+  live,
+
+  /// Luồng báo lỗi (mất kết nối / không đọc được dữ liệu).
+  error,
+}
 
 /// `true` nếu số mốc của [insert] lớn hơn STT lớn nhất đã biết từ
 /// danh sách lịch hẹn ([highestKnownNumber]). Những yêu cầu này chưa
@@ -482,6 +499,11 @@ class _QueueScreenState extends State<QueueScreen> {
   bool paused = false;
   String? message;
 
+  /// Trạng thái luồng dữ liệu realtime. Thẻ thông báo dùng giá trị này để
+  /// hiện nhãn "Đang kết nối…" / "Realtime" / "Mất kết nối" / "Giờ máy"
+  /// ngay cạnh đồng hồ chạy theo giờ của máy.
+  QueueFeedState _feedState = QueueFeedState.local;
+
   /// Khóa lưu trạng thái phòng trong [RoomSessionStore] (ưu tiên mã phòng).
   String get _storeKey => widget.roomId ?? widget.sessionId;
 
@@ -558,10 +580,14 @@ class _QueueScreenState extends State<QueueScreen> {
     }
     final appointmentStream = widget.appointmentQueueStream;
     if (appointmentStream != null) {
+      _feedState = QueueFeedState.connecting;
       _appointmentSubscription = appointmentStream.listen(
         _applyAppointmentUpdate,
         onError: (Object error, StackTrace stackTrace) {
           if (mounted) {
+            // Đồng hồ vẫn chạy theo giờ máy, nhưng thẻ báo rõ là đang
+            // không nhận được dữ liệu realtime nữa.
+            setState(() => _feedState = QueueFeedState.error);
             notify(
               'Không tải được số thứ tự từ lịch hẹn. '
               'Kiểm tra kết nối Firebase.',
@@ -689,6 +715,10 @@ class _QueueScreenState extends State<QueueScreen> {
     update = _applyPendingRenumber(update);
     final newlyRequeuedNumbers = <int>[];
     setState(() {
+      // Đã có đợt dữ liệu thật từ luồng: thẻ thông báo chuyển sang
+      // trạng thái "Realtime". Mỗi đợt emit sau đó đều vẽ lại thẻ với
+      // nội dung/STT/giờ mới nhất.
+      _feedState = QueueFeedState.live;
       final wasEmpty = current <= 0;
       _appointmentIdByNumber.addAll(update.appointmentIdByNumber);
       for (final number in update.numbers) {
@@ -2284,8 +2314,14 @@ class _QueueScreenState extends State<QueueScreen> {
                         _StatusBanner(
                           paused: paused,
                           message: message ?? _defaultStatusMessage,
-                          footer:
-                              '${widget.roomName} · ${widget.departmentName} · 08:42',
+                          // Footer chạy realtime theo GIỜ MÁY (nhảy mỗi
+                          // giây) kèm trạng thái luồng dữ liệu lịch hẹn.
+                          footer: _LiveStatusFooter(
+                            prefix:
+                                '${widget.roomName} · ${widget.departmentName}',
+                            paused: paused,
+                            feedState: _feedState,
+                          ),
                         ),
                       ],
                     ),
@@ -3788,7 +3824,10 @@ class _StatusBanner extends StatelessWidget {
 
   final bool paused;
   final String message;
-  final String footer;
+
+  /// Dòng chân thẻ. Là [Widget] thay vì [String] vì đồng hồ giờ máy cần
+  /// tự nhảy mỗi giây mà không kéo theo việc vẽ lại toàn bộ màn hình.
+  final Widget footer;
 
   @override
   Widget build(BuildContext context) => AnimatedContainer(
@@ -3872,14 +3911,18 @@ class _StatusBanner extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 6),
-                  Text(
-                    footer,
-                    style: TextStyle(
-                      fontSize: 10.3,
-                      fontWeight: FontWeight.w500,
-                      color: paused
-                          ? const Color(0xFFB08F4E)
-                          : const Color(0xFF8AA79A),
+                  Expanded(
+                    child: DefaultTextStyle(
+                      style: TextStyle(
+                        fontSize: 10.3,
+                        fontWeight: FontWeight.w500,
+                        color: paused
+                            ? const Color(0xFFB08F4E)
+                            : const Color(0xFF8AA79A),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      child: footer,
                     ),
                   ),
                 ],
@@ -3890,6 +3933,120 @@ class _StatusBanner extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// Định dạng `HH:mm:ss` theo giờ địa phương của MÁY đang chạy app.
+/// `DateTime.now()` trả giờ theo múi giờ của thiết bị, không phải giờ
+/// server, nên thẻ thông báo luôn khớp đồng hồ trên máy.
+String formatMayGio(DateTime time) {
+  String haiChuSo(int value) => value.toString().padLeft(2, '0');
+  return '${haiChuSo(time.hour)}:${haiChuSo(time.minute)}'
+      ':${haiChuSo(time.second)}';
+}
+
+/// Dòng chân thẻ thông báo chạy REALTIME TRÊN MÁY.
+///
+/// - Đồng hồ lấy từ `DateTime.now()` và tự nhảy mỗi giây bằng
+///   [Timer.periodic]; chỉ chính widget nhỏ này vẽ lại, không rebuild
+///   cả màn hình hàng chờ (vốn rất lớn) mỗi giây.
+/// - Khi app bị đưa vào nền rồi mở lại, [WidgetsBindingObserver] cập
+///   ngay giờ mới nhất thay vì đợi nhịp timer tiếp theo.
+/// - Nhãn đi kèm cho biết luồng lịch hẹn Firebase đang ở trạng thái nào:
+///   `Giờ máy` (không có stream), `Đang kết nối…`, `Realtime` (đã nhận
+///   dữ liệu) hoặc `Mất kết nối` (stream báo lỗi).
+class _LiveStatusFooter extends StatefulWidget {
+  const _LiveStatusFooter({
+    required this.prefix,
+    required this.paused,
+    required this.feedState,
+  });
+
+  /// "Tên phòng · Tên khoa" lấy từ phòng bác sĩ đang mở.
+  final String prefix;
+  final bool paused;
+  final QueueFeedState feedState;
+
+  @override
+  State<_LiveStatusFooter> createState() => _LiveStatusFooterState();
+}
+
+class _LiveStatusFooterState extends State<_LiveStatusFooter>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+  late DateTime _now;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    WidgetsBinding.instance.addObserver(this);
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final now = DateTime.now();
+      // Tránh setState thừa nếu timer bắn trong cùng một giây hiển thị.
+      if (formatMayGio(now) == formatMayGio(_now)) return;
+      setState(() => _now = now);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      // Giờ máy có thể đã đổi nhiều phút trong lúc app nằm nền.
+      setState(() => _now = DateTime.now());
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  ({String label, Color color}) get _feedBadge {
+    final neutral = widget.paused
+        ? const Color(0xFFB08F4E)
+        : const Color(0xFF8AA79A);
+    return switch (widget.feedState) {
+      QueueFeedState.local => (label: 'Giờ máy', color: neutral),
+      QueueFeedState.connecting => (
+        label: 'Đang kết nối…',
+        color: const Color(0xFFC98A17),
+      ),
+      QueueFeedState.live => (
+        label: 'Realtime',
+        color: const Color(0xFF1E9C48),
+      ),
+      QueueFeedState.error => (
+        label: 'Mất kết nối',
+        color: const Color(0xFFD93F3F),
+      ),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = _feedBadge;
+    final baseStyle = DefaultTextStyle.of(context).style;
+    return Text.rich(
+      TextSpan(
+        style: baseStyle,
+        children: <InlineSpan>[
+          TextSpan(text: '${widget.prefix} · ${formatMayGio(_now)} · '),
+          TextSpan(
+            text: badge.label,
+            style: baseStyle.copyWith(
+              color: badge.color,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
 }
 
 /// Dòng gợi ý khi danh sách trống.

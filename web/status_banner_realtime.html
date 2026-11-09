@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Thông báo từ Bác sĩ · Realtime trên máy</title>
+  <style>
+    :root {
+      --green: #2ac653;
+      --green-soft: #eaf9f0;
+      --green-border: #cff0dc;
+      --green-title: #14532c;
+      --green-body: #38624a;
+      --green-foot: #8aa79a;
+      --amber: #f5a623;
+      --amber-soft: #fff8e8;
+      --amber-border: #ffe6bc;
+      --amber-title: #6b4a00;
+      --amber-body: #8a6a2f;
+      --amber-foot: #b08f4e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 34px 20px 60px;
+      background: #f2f3fb;
+      color: #1d2b24;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; }
+    h1 { font-size: 18px; margin: 0 0 6px; font-weight: 800; }
+    .sub { font-size: 12.5px; color: #6b7c73; margin: 0 0 22px; line-height: 1.6; }
+    .sub code { background: #e7e9f5; padding: 1px 5px; border-radius: 5px; }
+
+    /* ---- Thẻ thông báo (khớp thiết kế trong app Flutter) ---- */
+    .banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 18px 20px 16px;
+      border-radius: 24px;
+      background: var(--green-soft);
+      border: 1px solid var(--green-border);
+      box-shadow: 0 10px 20px rgba(42, 198, 83, .12);
+      transition: background .26s ease, border-color .26s ease, box-shadow .26s ease;
+    }
+    .banner.paused {
+      background: var(--amber-soft);
+      border-color: var(--amber-border);
+      box-shadow: 0 10px 20px rgba(245, 166, 35, .12);
+    }
+    .icon-halo {
+      flex: none;
+      width: 39px; height: 39px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      background: rgba(42, 198, 83, .18);
+      transition: background .26s ease;
+    }
+    .paused .icon-halo { background: rgba(245, 166, 35, .18); }
+    .icon {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      background: var(--green);
+      color: #fff;
+      font-size: 20px; font-weight: 900; line-height: 1;
+      transition: background .26s ease;
+    }
+    .paused .icon { background: var(--amber); }
+    .banner-body { flex: 1; min-width: 0; }
+    .banner-title {
+      font-size: 15px; font-weight: 800; color: var(--green-title);
+      transition: color .26s ease;
+    }
+    .paused .banner-title { color: var(--amber-title); }
+    .banner-message {
+      margin-top: 6px;
+      font-size: 12.4px; line-height: 1.55;
+      color: var(--green-body);
+      white-space: pre-line;
+      transition: color .26s ease;
+    }
+    .paused .banner-message { color: var(--amber-body); }
+    .banner-footer {
+      margin-top: 10px;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 10.4px; font-weight: 500;
+      color: var(--green-foot);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition: color .26s ease;
+    }
+    .paused .banner-footer { color: var(--amber-foot); }
+    .bullet { flex: none; width: 4px; height: 4px; border-radius: 50%; background: #7fae92; }
+    .paused .bullet { background: #c9a96a; }
+    .clock { font-variant-numeric: tabular-nums; font-weight: 700; letter-spacing: .2px; }
+    .badge { font-weight: 800; }
+    .badge.live { color: #1e9c48; }
+    .badge.connecting { color: #c98a17; }
+    .badge.error { color: #d93f3f; }
+    .badge.local { color: inherit; }
+    .live-dot {
+      display: inline-block; width: 6px; height: 6px; margin-right: 4px;
+      border-radius: 50%; background: #1e9c48; vertical-align: 1px;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+
+    /* ---- Bảng điều khiển ---- */
+    .panel {
+      margin-top: 22px;
+      padding: 18px 20px;
+      border-radius: 18px;
+      background: #fff;
+      border: 1px solid #e4e7f2;
+    }
+    .panel h2 { font-size: 13px; margin: 0 0 12px; font-weight: 800; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      font: inherit; font-size: 12px; font-weight: 700;
+      padding: 9px 13px; border-radius: 10px;
+      border: 1px solid #d9e2db; background: #f7faf8; color: #245438;
+      cursor: pointer; transition: transform .12s ease, background .12s ease;
+    }
+    button:hover { background: #eaf7ee; }
+    button:active { transform: translateY(1px); }
+    button.primary { background: #1e9c48; border-color: #1e9c48; color: #fff; }
+    button.primary:hover { background: #18853d; }
+    button.warn { color: #8a5a00; border-color: #f0d8a8; background: #fffaf0; }
+    .toggles { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font-size: 12px; color: #4b5f54; }
+    label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .meta { margin-top: 14px; font-size: 11.5px; color: #77877e; line-height: 1.7; }
+    .meta b { color: #345a43; }
+    .log {
+      margin-top: 12px; padding: 10px 12px;
+      border-radius: 12px; background: #f6f8fb; border: 1px solid #e8ecf4;
+      font: 11.5px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #4c5c54; max-height: 130px; overflow: auto;
+    }
+    .log div { white-space: nowrap; }
+    .log span { color: #1e9c48; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Thông báo từ Bác sĩ — chạy realtime trên máy</h1>
+    <p class="sub">
+      Bản xem trước của thẻ trong <code>lib/support_doctor/queue_screen.dart</code>.
+      Đồng hồ lấy <b>giờ địa phương của máy bạn</b> và tự nhảy mỗi giây; nội dung thẻ đổi
+      ngay khi có sự kiện lịch hẹn (mô phỏng tại chỗ, không cần Firebase).
+    </p>
+
+    <div class="banner" id="banner">
+      <div class="icon-halo"><div class="icon" id="icon">✓</div></div>
+      <div class="banner-body">
+        <div class="banner-title" id="title">Thông báo từ Bác sĩ</div>
+        <div class="banner-message" id="message">Chưa có bệnh nhân nào trong danh sách lịch hẹn đã xác nhận của phòng hôm nay.
+STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.</div>
+        <div class="banner-footer">
+          <span class="bullet"></span>
+          <span id="footer">HH001 · Khoa Hô hấp · <span class="clock">--:--:--</span> · Realtime</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Mô phỏng sự kiện realtime trên máy</h2>
+      <div class="controls">
+        <button class="primary" id="btnAdd">＋ Duyệt lịch hẹn (thêm STT)</button>
+        <button id="btnNext">Tiếp theo</button>
+        <button class="warn" id="btnPause">Tạm dừng khám</button>
+        <button id="btnOffline">Mất kết nối</button>
+        <button id="btnReset">Đặt lại</button>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="auto" checked /> Tự động phát sự kiện mỗi 6 giây</label>
+        <label><input type="checkbox" id="showDate" /> Hiện cả ngày tháng trong footer</label>
+      </div>
+      <div class="meta" id="meta"></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    // ---- Trạng thái mô phỏng (tương đương QueueScreen trong app) ----
+    const state = {
+      room: 'HH001',
+      department: 'Khoa Hô hấp',
+      waiting: [],
+      current: 0,
+      next: 0,
+      lastIssued: 0,
+      paused: false,
+      feed: 'live',          // live | connecting | error | local
+      auto: true,
+      showDate: false,
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const emptyMessage =
+      'Chưa có bệnh nhân nào trong danh sách lịch hẹn đã xác nhận của phòng hôm nay.\n' +
+      'STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.';
+    const pauseMessage =
+      'Bác sĩ đã nhấn nút “Tạm dừng khám”.\n' +
+      'Việc gọi số tiếp theo tạm thời bị dừng.\n' +
+      'Vui lòng chờ đến khi bác sĩ tiếp tục khám.';
+
+    function two(n) { return String(n).padStart(2, '0'); }
+
+    // Giờ MÁY: new Date() dùng múi giờ của thiết bị, không phải giờ server.
+    function clock(now) {
+      return two(now.getHours()) + ':' + two(now.getMinutes()) + ':' + two(now.getSeconds());
+    }
+    function fullDate(now) {
+      return two(now.getDate()) + '/' + two(now.getMonth() + 1) + '/' + now.getFullYear();
+    }
+    function timeZone(now) {
+      const minutes = -now.getTimezoneOffset();
+      const sign = minutes >= 0 ? '+' : '-';
+      return 'UTC' + sign + two(Math.floor(Math.abs(minutes) / 60)) + ':' + two(Math.abs(minutes) % 60);
+    }
+
+    function badge() {
+      switch (state.feed) {
+        case 'live': return { text: 'Realtime', cls: 'live', dot: true };
+        case 'connecting': return { text: 'Đang kết nối…', cls: 'connecting', dot: false };
+        case 'error': return { text: 'Mất kết nối', cls: 'error', dot: false };
+        default: return { text: 'Giờ máy', cls: 'local', dot: false };
+      }
+    }
+
+    function statusMessage() {
+      if (state.paused) return pauseMessage;
+      if (state.current <= 0) {
+        if (state.waiting.length) {
+          return 'Số bắt đầu là 0 – chưa gọi số nào.\n' +
+                 'Đang có ' + state.waiting.length + ' số trong hàng chờ; nhấn “Bắt đầu” để gọi số ' +
+                 state.waiting[0] + '.';
+        }
+        return emptyMessage;
+      }
+      if (state.next <= 0) {
+        return 'Bệnh nhân số ' + state.current + ' đang khám.\nHiện chưa có số tiếp theo trong hàng chờ.';
+      }
+      return 'Bệnh nhân số ' + state.current + ' đang khám.\n' +
+             'Nhấn “Tiếp theo” để xác nhận khám xong và gọi số ' + state.next + '.';
+    }
+
+    function log(text) {
+      const line = document.createElement('div');
+      const stamp = document.createElement('span');
+      stamp.textContent = '[' + clock(new Date()) + '] ';
+      line.append(stamp, document.createTextNode(text));
+      $('log').prepend(line);
+      while ($('log').children.length > 30) $('log').lastChild.remove();
+    }
+
+    function render(now) {
+      const b = badge();
+      const datePart = state.showDate ? ' ' + fullDate(now) : '';
+      $('footer').innerHTML =
+        state.room + ' · ' + state.department + ' · <span class="clock">' +
+        clock(now) + datePart + '</span> · ' +
+        (b.dot ? '<span class="live-dot"></span>' : '') +
+        '<span class="badge ' + b.cls + '">' + b.text + '</span>';
+
+      $('banner').classList.toggle('paused', state.paused);
+      $('icon').textContent = state.paused ? 'Ⅱ' : '✓';
+      $('title').textContent = state.paused ? 'Thông báo tạm dừng khám' : 'Thông báo từ Bác sĩ';
+      $('message').textContent = statusMessage();
+      $('meta').innerHTML =
+        'Giờ máy: <b>' + clock(now) + ' ' + fullDate(now) + '</b> · Múi giờ thiết bị: <b>' +
+        timeZone(now) + '</b> · ' +
+        'Trạng thái luồng: <b>' + b.text + '</b> · STT hiện tại: <b>' +
+        (state.current || '—') + '</b> · Đang chờ: <b>' + state.waiting.length + '</b>';
+    }
+
+    // Đồng hồ nhảy mỗi giây + cập nhật ngay khi tab được mở lại
+    // (tương đương Timer.periodic + WidgetsBindingObserver trong Flutter).
+    function tick() { render(new Date()); }
+    setInterval(tick, 1000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+    window.addEventListener('focus', tick);
+    tick();
+
+    function addAppointment(silent) {
+      state.lastIssued += 1;
+      state.waiting.push(state.lastIssued);
+      if (state.current <= 0) {
+        state.current = state.waiting.shift();
+        state.next = state.waiting.shift() || 0;
+      } else if (state.next <= 0) {
+        state.next = state.waiting.shift() || 0;
+      }
+      state.feed = 'live';
+      if (!silent) log('Lịch hẹn được xác nhận → STT ' + state.lastIssued + ' vào danh sách (realtime)');
+      tick();
+    }
+
+    function nextPatient() {
+      if (state.paused) { log('Đang tạm dừng khám — không gọi số tiếp theo'); return; }
+      if (state.current <= 0) { log('Chưa có số nào để gọi'); return; }
+      const done = state.current;
+      state.current = state.next;
+      state.next = state.waiting.shift() || 0;
+      log('Khám xong số ' + done + (state.current ? ' → đang khám số ' + state.current : ' → hết hàng chờ'));
+      tick();
+    }
+
+    $('btnAdd').onclick = () => addAppointment(false);
+    $('btnNext').onclick = nextPatient;
+    $('btnPause').onclick = () => {
+      state.paused = !state.paused;
+      $('btnPause').textContent = state.paused ? 'Tiếp tục khám' : 'Tạm dừng khám';
+      log(state.paused ? 'Bác sĩ tạm dừng khám' : 'Bác sĩ tiếp tục khám');
+      tick();
+    };
+    $('btnOffline').onclick = () => {
+      state.feed = state.feed === 'error' ? 'live' : 'error';
+      $('btnOffline').textContent = state.feed === 'error' ? 'Kết nối lại' : 'Mất kết nối';
+      log(state.feed === 'error' ? 'Mất kết nối dữ liệu lịch hẹn' : 'Đã kết nối lại luồng realtime');
+      tick();
+    };
+    $('btnReset').onclick = () => {
+      Object.assign(state, { waiting: [], current: 0, next: 0, lastIssued: 0, paused: false, feed: 'live' });
+      $('btnPause').textContent = 'Tạm dừng khám';
+      $('btnOffline').textContent = 'Mất kết nối';
+      log('Đặt lại danh sách lịch hẹn của phòng hôm nay');
+      tick();
+    };
+    $('auto').onchange = (e) => { state.auto = e.target.checked; log(state.auto ? 'Bật tự động phát sự kiện' : 'Tắt tự động phát sự kiện'); };
+    $('showDate').onchange = (e) => { state.showDate = e.target.checked; tick(); };
+
+    // Tự phát sự kiện để thấy thẻ đổi nội dung mà không cần bấm nút.
+    setInterval(() => {
+      if (state.auto && !document.hidden && state.feed !== 'error') {
+        addAppointment(false);
+      }
+    }, 6000);
+
+    log('Sẵn sàng: đồng hồ chạy theo giờ máy, thẻ lắng nghe sự kiện realtime');
+  </script>
+</body>
+</html>
