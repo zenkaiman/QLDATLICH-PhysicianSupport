@@ -400,12 +400,13 @@ class QueueScreen extends StatefulWidget {
   final Future<void> Function(String appointmentId, int soThuTu)?
   onRenumberAppointment;
 
-  /// Luồng mã `trang_thai_id` của `PhongKham/{roomId}` (12 tạm dừng /
-  /// 13 đang khám / 14 đóng phòng). `null` = document chưa có field,
-  /// lúc đó màn hình giữ nguyên trạng thái phiên local.
+  /// Luồng id trạng thái đã đối chiếu từ 4 field của `PhongKham/{roomId}`
+  /// (12 tạm dừng / 13 đang khám / 14 đóng phòng), ưu tiên field số.
+  /// `null` = không đọc được field hợp lệ, lúc đó màn hình giữ nguyên
+  /// trạng thái phiên local.
   final Stream<int?>? roomStatusStream;
 
-  /// Ghi mã trạng thái mới lên Firestore khi bác sĩ bấm nút
+  /// Ghi `trang_thai_id` + `trang_thai` lên Firestore khi bác sĩ bấm nút
   /// Tạm dừng / Tiếp tục hoặc Đóng / Mở phòng khám.
   final Future<void> Function(int statusId)? onRoomStatusChanged;
 
@@ -654,9 +655,9 @@ class _QueueScreenState extends State<QueueScreen> {
     super.dispose();
   }
 
-  /// Áp mã `trang_thai_id` từ `PhongKham/{roomId}` vào banner và các nút:
-  /// 12 → Tạm dừng khám, 13 → Đang khám, 14 → Đóng phòng khám.
-  /// `null` (chưa có field) trả quyền điều khiển về trạng thái phiên local.
+  /// Áp id trạng thái đã đối chiếu từ 4 field `PhongKham/{roomId}` vào
+  /// banner và các nút: 12 → Tạm dừng khám, 13 → Đang khám,
+  /// 14 → Đóng phòng khám. `null` trả quyền về trạng thái phiên local.
   void _applyRoomStatusId(int? id) {
     if (!mounted || id == _roomStatusId) return;
     _roomStatusId = id;
@@ -674,9 +675,9 @@ class _QueueScreenState extends State<QueueScreen> {
     _syncRoomState();
   }
 
-  /// Ghi trạng thái vừa bấm lên Firestore (nếu màn hình có kết nối
-  /// Firestore). Lỗi chỉ hiện thông báo, không đảo ngược giao diện vì
-  /// luồng realtime sẽ tự sửa nếu ghi không thành công.
+  /// Ghi 2 field snake_case `trang_thai_id` + `trang_thai` lên Firestore
+  /// (nếu màn hình có kết nối Firestore). Lỗi chỉ hiện thông báo, không
+  /// đảo ngược giao diện vì luồng realtime sẽ tự sửa nếu ghi thất bại.
   Future<void> _publishRoomStatusId(int id) async {
     final callback = widget.onRoomStatusChanged;
     if (callback == null) return;
@@ -2431,9 +2432,10 @@ class _QueueScreenState extends State<QueueScreen> {
                                     // chỉ khi bấm nút này phòng mới hiện "Tạm dừng".
                                     _syncRoomState();
                                   });
-                                  // Đồng bộ mã 12 (tạm dừng) / 13 (đang khám)
-                                  // lên PhongKham/{roomId}. Các màn hình và
-                                  // thiết bị khác nghe realtime sẽ đổi theo.
+                                  // Ghi cả `trang_thai_id` (12/13) và
+                                  // `trang_thai` (mã chuỗi) lên
+                                  // PhongKham/{roomId}. Các thiết bị khác
+                                  // nghe realtime sẽ đổi theo.
                                   unawaited(
                                     _publishRoomStatusId(
                                       paused
@@ -2486,7 +2488,7 @@ class _QueueScreenState extends State<QueueScreen> {
                               message = null;
                               _syncRoomState();
                             });
-                            // Đóng = 14, Mở lại = 13 (đang khám).
+                            // Đóng = 14, Mở lại = 13; ghi cả 2 field snake_case.
                             unawaited(
                               _publishRoomStatusId(
                                 seDong

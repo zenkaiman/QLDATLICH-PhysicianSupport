@@ -119,13 +119,15 @@ CSKH), vì chỉ các luồng này suy ra được `benhVienId` từ document `N
 Tab Bệnh viện / Bệnh nhân / Admin chưa có mã bệnh viện khi đăng nhập nên chưa
 áp dụng.
 
-## Trạng thái phòng khám theo `trang_thai_id` (12 / 13 / 14)
+## Trạng thái phòng khám: đọc 4 field, ghi 2 field (12 / 13 / 14)
 
 Bảng dùng chung nằm ở `lib/support_doctor/room_status.dart`. App lấy đúng
 document `PhongKham/{roomId}` theo mã phòng đã chọn (ví dụ
-`PhongKham/BV502_K001_HH001`), đọc `trang_thai_id`, so sánh với bảng
-12/13/14 rồi áp vào **bảng trạng thái phòng khám** (chip lọc + thẻ phòng) và
-**các nút Tạm dừng / Tiếp tục / Đóng / Mở phòng khám**.
+`PhongKham/BV502_K001_HH001`), đọc **cả 4 field** `trang_thai_id`,
+`trangThaiId`, `trang_thai`, `trangThai`, đối chiếu với bảng 12/13/14 rồi áp
+vào **bảng trạng thái phòng khám** (chip lọc + thẻ phòng) và **các nút
+Tạm dừng / Tiếp tục / Đóng / Mở phòng khám**. Khi field số và field chuỗi
+lệch nhau, **field số được ưu tiên**.
 
 | `trang_thai_id` | Trạng thái | Nút / hành động |
 | --- | --- | --- |
@@ -133,44 +135,53 @@ document `PhongKham/{roomId}` theo mã phòng đã chọn (ví dụ
 | `13` | Đang khám | Nút `Tạm dừng khám` / `Đóng phòng khám`, banner xanh |
 | `14` | Đóng phòng khám | Nút `Mở phòng khám`, banner đỏ, khoá mọi thao tác gọi số |
 
-- Trường chính là `trang_thai_id` (số hoặc chuỗi `"12"` …). Các biến thể
-  `trangThaiId`, `statusId`, `id_trang_thai`, `ma_trang_thai`, `trang_thai`,
-  `trangThai` vẫn được đọc để hỗ trợ dữ liệu cũ. Thiếu field hoặc mã lạ →
-  coi như `13` và giữ nguyên trạng thái phiên `RoomSessionStore` như trước.
+- `readClinicRoomStatus()` đọc trọn 4 field: 2 field số
+  (`trang_thai_id`, `trangThaiId`) và 2 field chuỗi (`trang_thai`,
+  `trangThai`), cộng các tên legacy `statusId`, `id_trang_thai`,
+  `ma_trang_thai`. Field số thắng field chuỗi; mã chuỗi được map
+  `dang_kham → 13`, `tam_dung_kham → 12`, `dong_phong_kham → 14`
+  (có alias `tam_dung`, `dong_phong`, `da_dong` khi đọc). Thiếu field hoặc
+  mã lạ → coi như `13` và giữ nguyên trạng thái phiên `RoomSessionStore`.
 - `clinic_firestore_service.dart`: `watchRoomStatusId()` nghe realtime đúng
-  document phòng; `updateRoomStatusId()` ghi `12/13/14` bằng `set(merge: true)`
-  nên không xoá các field `hospitalId`, `khoaId`, `ten_phong` … đang có.
+  document phòng; `updateRoomStatusId()` ghi **đúng 2 field snake_case**
+  `trang_thai_id` (12/13/14) + `trang_thai` (mã chuỗi), kèm
+  `ngay_cap_nhat_trang_thai`, bằng `set(merge: true)`. Không ghi
+  `trangThaiId` / `trangThai`, không xoá `hospitalId`, `khoaId`,
+  `ten_phong` … đang có.
 - Khi document có field, **Firestore là nguồn sự thật**: màn hình chọn
   khoa/phòng hiện nhãn đầy đủ kèm mã (`Tạm dừng khám · 12` …), chip lọc
   `Đang khám (13)` / `Tạm dừng khám (12)` / `Đóng phòng khám (14)` và không
   để trạng thái phiên local ghi đè lên.
-- Trên `QueueScreen`, bấm **Tạm dừng khám** ghi `12`, **Tiếp tục khám** và
-  **Mở phòng khám** ghi `13`, **Đóng phòng khám** ghi `14`. Trạng thái từ
-  thiết bị khác cũng cập nhật banner/nút ngay qua stream. Thay đổi từ
-  Firestore **không chụp lại giờ máy**: mốc `HH:mm:ss` vẫn chỉ đổi khi bấm
-  Tạm dừng / Tiếp tục trên chính thiết bị đó.
-- `web/status_banner_realtime.html` có thêm bảng 12/13/14 và tô dòng đang
-  áp dụng; các nút mô phỏng cũng ghi log mã trạng thái tương ứng.
+- Trên `QueueScreen`, bấm **Tạm dừng khám** ghi `12` + `tam_dung_kham`,
+  **Tiếp tục khám** / **Mở phòng khám** ghi `13` + `dang_kham`,
+  **Đóng phòng khám** ghi `14` + `dong_phong_kham` vào 2 field snake_case.
+  Trạng thái từ thiết bị khác cũng cập nhật banner/nút ngay qua stream.
+  Thay đổi từ Firestore **không chụp lại giờ máy**: mốc `HH:mm:ss` vẫn chỉ
+  đổi khi bấm Tạm dừng / Tiếp tục trên chính thiết bị đó.
+- Thay đổi này **chỉ ở tầng Firebase**: không thêm cột/bảng UI, không đổi
+  chip lọc, thẻ phòng hay banner. `web/status_banner_realtime.html` vẫn giữ
+  bảng 12/13/14 và tô dòng đang áp dụng như trước.
 
 ### Bổ sung field cho document phòng đã có
 
-Trên Firebase Console, mở `PhongKham/BV502_K001_HH001` → **Add field**
-`trang_thai_id` (kiểu `number`, giá trị `13` để bắt đầu ở **Đang khám**).
-Hoặc gọi từ code dev (không tự chạy khi khởi động app):
+Trên Firebase Console, document `PhongKham/BV502_K001_HH001` đang có cả 4
+field như ảnh: `trangThai: "dang_kham"`, `trangThaiId: 13`,
+`trang_thai: "dang_kham"`, `trang_thai_id: 13`. App đọc cả 4 để đối chiếu,
+nhưng khi bấm nút chỉ **cập nhật 2 field snake_case** `trang_thai_id` và
+`trang_thai`; 2 field camelCase được giữ nguyên để không phá dữ liệu cũ.
+
+Nếu document chưa có cặp snake_case, gọi từ code dev (không tự chạy khi
+khởi động app):
 
 ```dart
 await DatabaseSeeder.seedRoomStatusId(
   roomId: 'BV502_K001_HH001',
-  statusId: 13, // 12 tạm dừng | 13 đang khám | 14 đóng phòng
+  statusId: 13, // 12 tam_dung_kham | 13 dang_kham | 14 dong_phong_kham
 );
 ```
 
-> Tên field `trang_thai_id` là mặc định đã chọn cho luồng này; nếu document
-> `BV502_K001_HH001` đang dùng tên khác, thêm tên đó vào
-> `kRoomStatusFieldVariants` trong `lib/support_doctor/room_status.dart` hoặc
-> đổi trực tiếp trên Firebase Console.
-
-`lib/database_seeder.dart` dùng `SetOptions(merge: true)` nên chỉ thêm field
-trạng thái, không tạo lại document. Cần đảm bảo Firestore rules cho phép nhân
-viên/bác sĩ đọc và ghi field này. Không thay đổi cấu hình Firebase, không tạo
-collection/subcollection mới, không thêm dependency và không thêm test.
+`DatabaseSeeder.seedRoomStatusId()` và `updateRoomStatusId()` đều ghi cùng
+2 field đó bằng `SetOptions(merge: true)`. Cần đảm bảo Firestore rules cho
+phép nhân viên/bác sĩ đọc 4 field và ghi 2 field snake_case. Không thay đổi
+cấu hình Firebase, không tạo collection/subcollection mới, không thêm
+dependency, không thêm UI/test.
