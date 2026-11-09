@@ -692,7 +692,15 @@ class _QueueScreenState extends State<QueueScreen> {
       }
       _eligibleAppointmentNumbers = List<int>.of(update.numbers);
       final confirmedNumbers = update.numbers.toSet();
-      final passedNumbers = passed.map((entry) => entry.number).toSet();
+      // Chỉ những số ĐÃ KHÁM mới bị loại khỏi hàng chờ khi đồng bộ. Số nằm
+      // trong sổ “SỐ ĐÃ CHO QUA” thì không loại theo số, vì số đó có thể đã
+      // được cấp lại cho một bệnh nhân khác đang chờ (bệnh nhân đã đợi được
+      // Firebase giữ ở trạng thái 7 nên vốn không nằm trong danh sách đủ
+      // điều kiện).
+      final passedNumbers = <int>{
+        for (final entry in passed)
+          if (!entry.deferred) entry.number,
+      };
       _requeuedAppointmentNumbers.removeWhere(
         (number) =>
             confirmedNumbers.contains(number) ||
@@ -904,9 +912,8 @@ class _QueueScreenState extends State<QueueScreen> {
     final finished = current;
     var shouldReportExamined = false;
     setState(() {
-      // Số từng xin đợi nay đã khám xong: bỏ khỏi "SỐ ĐÃ CHO QUA" để không
-      // xuất hiện ở cả 2 danh sách cùng lúc.
-      passed.removeWhere((e) => e.number == finished && e.deferred);
+      // “SỐ ĐÃ CHO QUA” là sổ ghi cố định của phòng: nút Tiếp theo KHÔNG
+      // xoá số nào khỏi đó. Chỉ nút “Đặt lại số” mới xoá toàn bộ.
       if (!_currentConfirmed) {
         // Xác nhận khám: ghi số hiện tại vào danh sách đã khám.
         passed.add((number: finished, deferred: false));
@@ -1051,11 +1058,8 @@ class _QueueScreenState extends State<QueueScreen> {
     if (!mounted || confirmed != true) return;
 
     setState(() {
-      // Số đã xin đợi nay xác nhận vắng mặt: bỏ khỏi "SỐ ĐÃ CHO QUA" và,
-      // nếu số đó đang có lượt trong hàng chờ, bỏ luôn khỏi hàng chờ.
-      passed.removeWhere(
-        (entry) => entry.deferred && entry.number == absentNumber,
-      );
+      // “SỐ ĐÃ CHO QUA” là sổ ghi cố định: xác nhận vắng mặt chỉ bỏ số khỏi
+      // hàng chờ, không xoá số khỏi sổ. Chỉ “Đặt lại số” mới xoá toàn bộ.
       _absentAppointmentNumbers.add(absentNumber);
       _requeuedAppointmentNumbers.remove(absentNumber);
       _scheduledFutureInserts.removeWhere(
@@ -1068,7 +1072,7 @@ class _QueueScreenState extends State<QueueScreen> {
       final queueNote = wasInQueue ? ' và khỏi hàng chờ' : '';
       message =
           'Đã ghi nhận bệnh nhân số $absentNumber vắng mặt.'
-          '\nSố $absentNumber đã được bỏ khỏi danh sách “SỐ ĐÃ CHO QUA”'
+          '\nSố $absentNumber vẫn được giữ trong “SỐ ĐÃ CHO QUA”'
           '$queueNote.';
       _syncRoomState();
     });
@@ -1267,11 +1271,12 @@ class _QueueScreenState extends State<QueueScreen> {
     final previousCurrent = current;
     final previousNext = next;
     setState(() {
-      // Bệnh nhân vào phòng khám ngay: bỏ khỏi danh sách đã khám, sẽ được
-      // đưa lại danh sách khi bác sĩ nhấn "Tiếp theo".
-      // Số được gọi lại đang khám -> không còn thuộc "ĐÃ KHÁM" hay
-      // "SỐ ĐÃ CHO QUA" nữa.
-      passed.removeWhere((entry) => entry.number == picked);
+      // Bệnh nhân vào phòng khám ngay: bỏ khỏi danh sách "ĐÃ KHÁM" (sẽ được
+      // ghi lại khi bác sĩ nhấn "Tiếp theo"). Riêng "SỐ ĐÃ CHO QUA" vẫn giữ
+      // nguyên – chỉ nút "Đặt lại số" mới xoá sổ này.
+      passed.removeWhere(
+        (entry) => entry.number == picked && !entry.deferred,
+      );
       // Số được gọi lại coi như đang chờ khám trở lại: không còn là số
       // vắng mặt hay số đang chờ Firebase xác nhận chèn lại.
       _absentAppointmentNumbers.remove(picked);
@@ -1538,15 +1543,11 @@ class _QueueScreenState extends State<QueueScreen> {
         );
         _scheduledFutureInserts.add(insert);
       }
-      // Cả số chèn ngay lẫn số đã lên lịch đều rời danh sách xin đợi.
+      // Cả số chèn ngay lẫn số đã lên lịch vẫn được GIỮ trong “SỐ ĐÃ CHO
+      // QUA” (kèm số cũ + tên + mã lịch hẹn) để lễ tân còn đối chiếu; chỉ
+      // nút “Đặt lại số” mới xoá sổ này. Người được chèn lại vào hàng chờ
+      // nhận số mới nên không trùng số trong danh sách đang gọi.
       final insertedNumbers = results.map((r) => r.number).toSet();
-      passed.removeWhere(
-        (entry) => entry.deferred && insertedNumbers.contains(entry.number),
-      );
-      for (final number in insertedNumbers) {
-        _patientNameDaChoQua.remove(number);
-        _maLichHenDaChoQua.remove(number);
-      }
       // Số chèn ngay được giữ tạm trong hàng chờ và sẽ báo về trạng
       // thái `2` ngay sau setState. Số chờ mốc tương lai vẫn giữ `7`
       // cho tới khi thực sự được đặt vào hàng chờ ở một đợt đồng bộ sau.
@@ -1637,10 +1638,16 @@ class _QueueScreenState extends State<QueueScreen> {
       if (next > 0) next,
       ...waiting,
     ];
+    // Nếu hàng chờ đang bắt đầu từ số không lớn hơn số đã khám xong (ví dụ
+    // vừa bấm “Gọi lại” một số cũ) thì đánh lại theo số nền sẽ đẩy lùi cả
+    // hàng chờ lên — không đúng ý người dùng. Trường hợp đó chỉ dọn trùng.
+    final dungSoNen = order.isEmpty || order.first > soMoi;
     final renumber = <int, int>{};
-    for (final so in order) {
-      soMoi += 1;
-      if (soMoi != so) renumber[so] = soMoi;
+    if (dungSoNen) {
+      for (final so in order) {
+        soMoi += 1;
+        if (soMoi != so) renumber[so] = soMoi;
+      }
     }
 
     if (renumber.isEmpty) {
@@ -1713,15 +1720,16 @@ class _QueueScreenState extends State<QueueScreen> {
       current = doi(current);
       next = doi(next);
       waiting = <int>[for (final so in waiting) doi(so)];
+      // Chỉ số của những người ĐÃ KHÁM đi theo bảng đổi số. Sổ “SỐ ĐÃ CHO
+      // QUA” (chip + lịch sử xin đợi) giữ nguyên số cũ, tên cũ và mã lịch
+      // hẹn cũ — không thao tác nào ngoài “Đặt lại số” được sửa sổ này.
       for (var i = 0; i < passed.length; i++) {
         final entry = passed[i];
+        if (entry.deferred) continue;
         final moi = renumber[entry.number];
         if (moi != null) {
-          passed[i] = (number: moi, deferred: entry.deferred);
+          passed[i] = (number: moi, deferred: false);
         }
-      }
-      for (var i = 0; i < _deferredHistory.length; i++) {
-        _deferredHistory[i] = doi(_deferredHistory[i]);
       }
       for (var i = 0; i < _eligibleAppointmentNumbers.length; i++) {
         _eligibleAppointmentNumbers[i] = doi(_eligibleAppointmentNumbers[i]);
@@ -1748,16 +1756,8 @@ class _QueueScreenState extends State<QueueScreen> {
       _patientNameByNumber
         ..clear()
         ..addAll(tenTheoSo);
-      // Tên trong “SỐ ĐÃ CHO QUA” đi theo số của chính nó; nếu trùng số với
-      // một số đã cho qua trước đó thì giữ tên của số đã có (số vừa đợi
-      // được ưu tiên vì đã ghi vào map trước khi đánh số lại).
-      final tenChoQua = <int, String>{};
-      for (final entry in _patientNameDaChoQua.entries) {
-        tenChoQua.putIfAbsent(doi(entry.key), () => entry.value);
-      }
-      _patientNameDaChoQua
-        ..clear()
-        ..addAll(tenChoQua);
+      // Tên trong “SỐ ĐÃ CHO QUA” khoá theo đúng số cũ của chip nên không
+      // đổi khi đánh số lại hàng chờ.
       final vangMat = <int>{for (final so in _absentAppointmentNumbers) doi(so)};
       _absentAppointmentNumbers
         ..clear()
