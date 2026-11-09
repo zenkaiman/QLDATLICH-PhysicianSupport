@@ -1146,17 +1146,17 @@ class ClinicRoomData {
   final String staffId;
   final ClinicRoomStatus status;
 
-  /// Mã `trang_thai_id` đọc được từ document `PhongKham/{id}`
-  /// (12 tạm dừng / 13 đang khám / 14 đóng phòng). `null` khi document
-  /// chưa có trường này — lúc đó dùng trạng thái phiên trong
-  /// [RoomSessionStore] như cũ.
+  /// Id trạng thái sau khi đối chiếu 4 field trong `PhongKham/{id}`
+  /// (12 tạm dừng / 13 đang khám / 14 đóng phòng), ưu tiên field số.
+  /// `null` khi document chưa có field hợp lệ — lúc đó dùng trạng thái
+  /// phiên trong [RoomSessionStore] như cũ.
   final int? trangThaiId;
   final int? currentNumber;
   final int waitingCount;
   final int examinedCount;
 
-  /// Nhãn hiện trong bảng trạng thái phòng khám. Khi document có
-  /// `trang_thai_id` thì hiện đúng nhãn 12/13/14 kèm mã để đối chiếu.
+  /// Nhãn hiện trong bảng trạng thái phòng khám. Khi đối chiếu được id
+  /// từ 4 field Firestore thì hiện đúng nhãn 12/13/14 kèm mã.
   String get statusLabel {
     final id = trangThaiId;
     if (id == null) return status.label;
@@ -1198,8 +1198,8 @@ class ClinicRoomData {
 }
 
 /// Nguồn dữ liệu realtime cho một phòng: luồng số thứ tự từ lịch hẹn,
-/// luồng `trang_thai_id` của chính phòng, và các hàm ghi kết quả khám /
-/// số thứ tự / trạng thái về nơi lưu trữ.
+/// luồng trạng thái đã đối chiếu từ 4 field của chính phòng, và các hàm
+/// ghi kết quả khám / số thứ tự / trạng thái về nơi lưu trữ.
 typedef ClinicAppointmentFeed = ({
   Stream<AppointmentQueueUpdate> updates,
   Future<void> Function(String appointmentId, AppointmentOutcome outcome)
@@ -1209,12 +1209,13 @@ typedef ClinicAppointmentFeed = ({
   /// chèn nhận `số mốc + 1`, các số phía sau tăng thêm 1.
   Future<void> Function(String appointmentId, int soThuTu) renumber,
 
-  /// Mã `trang_thai_id` của `PhongKham/{roomId}` theo thời gian thực:
+  /// Id trạng thái theo thời gian thực, đã đối chiếu từ `trang_thai_id`,
+  /// `trangThaiId`, `trang_thai`, `trangThai` (ưu tiên field số):
   /// 12 tạm dừng / 13 đang khám / 14 đóng phòng; `null` khi document
-  /// chưa có trường này.
+  /// chưa có field hợp lệ.
   Stream<int?> roomStatus,
 
-  /// Ghi mã trạng thái mới lên Firestore khi bác sĩ bấm nút
+  /// Ghi `trang_thai_id` + `trang_thai` lên Firestore khi bác sĩ bấm nút
   /// Tạm dừng / Tiếp tục hoặc Đóng / Mở phòng khám.
   Future<void> Function(int statusId) setRoomStatus,
 });
@@ -1269,9 +1270,9 @@ class ClinicRoomPickerScreen extends StatelessWidget {
       if (RoomSessionStore.instance.sessionOf(room.id) case final snapshot
           when snapshot.started)
         room.copyWith(
-          // Khi document PhongKham có `trang_thai_id` (12/13/14) thì
-          // Firestore là nguồn sự thật cho bảng trạng thái; chỉ phủ
-          // trạng thái phiên local cho dữ liệu cũ chưa có trường này.
+          // Khi đối chiếu được id từ 4 field Firestore thì Firestore là
+          // nguồn sự thật cho bảng trạng thái; chỉ phủ trạng thái phiên
+          // local cho dữ liệu cũ chưa có field hợp lệ.
           status: room.trangThaiId != null
               ? room.status
               : switch (snapshot.status) {
