@@ -149,6 +149,23 @@
     label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
     .meta { margin-top: 14px; font-size: 11.5px; color: #77877e; line-height: 1.7; }
     .meta b { color: #345a43; }
+    /* ---- Bảng trạng thái phòng khám (PhongKham/{roomId}) ---- */
+    .status-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .status-table th, .status-table td {
+      padding: 9px 10px; text-align: left; border-bottom: 1px solid #edf0f6;
+    }
+    .status-table th {
+      color: #6b7c73; font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .status-table tr:last-child td { border-bottom: 0; }
+    .status-table tr.active { background: #eaf9f0; }
+    .status-table tr.active td { font-weight: 800; color: #14532c; }
+    .status-table .id-pill {
+      display: inline-block; min-width: 30px; padding: 2px 7px;
+      border-radius: 999px; background: #edf1f8; color: #345a43;
+      text-align: center; font-weight: 800;
+    }
     .log {
       margin-top: 12px; padding: 10px 12px;
       border-radius: 12px; background: #f6f8fb; border: 1px solid #e8ecf4;
@@ -189,8 +206,10 @@
       <b>giờ địa phương của máy bạn</b> khi bấm <b>Tạm dừng khám</b> hoặc
       <b>Tiếp tục khám</b>, rồi đứng yên cho đến lần bấm tiếp theo. Nội dung thẻ vẫn đổi
       theo sự kiện lịch hẹn realtime (mô phỏng tại chỗ, không cần Firebase).
-      Thẻ có <b>3 trạng thái</b>: Đang khám / Tạm dừng / <b>Đã đóng phòng</b>, với nút
-      <b>Đóng / Mở phòng khám</b> ở dưới cùng.
+      Thẻ có <b>3 trạng thái</b> theo <code>trang_thai_id</code>:
+      <b>12</b> Tạm dừng khám / <b>13</b> Đang khám / <b>14</b> Đóng phòng khám,
+      với nút <b>Đóng / Mở phòng khám</b> ở dưới cùng. Bảng trạng thái bên dưới
+      tô đậm mã đang áp dụng.
     </p>
 
     <div class="banner" id="banner">
@@ -223,11 +242,25 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       <div class="log" id="log"></div>
     </div>
 
+    <div class="panel">
+      <h2>Bảng trạng thái phòng khám · <code>PhongKham/{roomId}.trang_thai_id</code></h2>
+      <table class="status-table">
+        <thead>
+          <tr><th>ID trạng thái</th><th>Nhãn</th><th>Nút / hành động</th><th>Hiện tại</th></tr>
+        </thead>
+        <tbody>
+          <tr id="statusRow12"><td><span class="id-pill">12</span></td><td>Tạm dừng khám</td><td>Tiếp tục khám (ghi 13)</td><td></td></tr>
+          <tr id="statusRow13"><td><span class="id-pill">13</span></td><td>Đang khám</td><td>Tạm dừng khám (ghi 12) / Đóng phòng khám (ghi 14)</td><td></td></tr>
+          <tr id="statusRow14"><td><span class="id-pill">14</span></td><td>Đóng phòng khám</td><td>Mở phòng khám (ghi 13)</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
     <!-- Nút dưới cùng, nằm PHÍA DƯỚI thẻ thông báo bác sĩ -->
     <div class="bottom-bar">
       <button class="room-toggle" id="btnRoom">🔒 Đóng phòng khám</button>
       <div class="bottom-hint" id="roomHint">
-        Trạng thái phòng: Đang khám. Đóng phòng sẽ khoá mọi thao tác gọi số.
+        Trạng thái phòng: Đang khám (trang_thai_id = 13). Đóng phòng sẽ khoá mọi thao tác gọi số.
       </div>
     </div>
   </div>
@@ -326,6 +359,13 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       const roomStatus = state.closed ? 'Đã đóng'
                        : state.paused ? 'Tạm dừng'
                        : 'Đang khám';
+      // Bảng 12/13/14 giống hệt lib/support_doctor/room_status.dart.
+      const roomStatusId = state.closed ? 14 : state.paused ? 12 : 13;
+      for (const id of [12, 13, 14]) {
+        const row = $('statusRow' + id);
+        row.classList.toggle('active', id === roomStatusId);
+        row.lastElementChild.textContent = id === roomStatusId ? '✓ Đang áp dụng' : '';
+      }
       // Chỉ dùng mốc ĐÃ CHỤP lúc bấm nút; không đọc new Date() ở footer.
       const datePart = moc && state.showDate ? ' ' + fullDate(moc) : '';
       const timePart = moc
@@ -349,10 +389,10 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
       $('btnRoom').textContent = state.closed ? '🔓 Mở phòng khám' : '🔒 Đóng phòng khám';
       $('btnRoom').classList.toggle('open-room', state.closed);
       $('roomHint').textContent = state.closed
-        ? 'Trạng thái phòng: Đã đóng — các thao tác gọi số bị khoá. Bấm để mở lại.'
-        : 'Trạng thái phòng: ' + roomStatus + '. Đóng phòng sẽ khoá mọi thao tác gọi số.';
+        ? 'Trạng thái phòng: Đã đóng (trang_thai_id = 14) — các thao tác gọi số bị khoá. Bấm để mở lại.'
+        : 'Trạng thái phòng: ' + roomStatus + ' (trang_thai_id = ' + roomStatusId + '). Đóng phòng sẽ khoá mọi thao tác gọi số.';
       $('meta').innerHTML =
-        'Trạng thái phòng: <b>' + roomStatus + '</b> · ' +
+        'Trạng thái phòng: <b>' + roomStatus + ' · ' + roomStatusId + '</b> · ' +
         'Mốc thay đổi trạng thái: <b>' +
         (moc ? clock(moc) + ' ' + fullDate(moc) + ' (' + state.lastActionLabel + ')'
              : 'chưa có — bấm Tạm dừng / Tiếp tục khám') +
@@ -407,7 +447,8 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
         ? 'Bác sĩ tạm dừng khám lúc ' + gio + '.\nViệc gọi số tiếp theo tạm thời bị dừng.\nVui lòng chờ đến khi bác sĩ tiếp tục khám.'
         : 'Bác sĩ tiếp tục khám lúc ' + gio + '.\nSố thứ tự được gọi lại bình thường.';
       $('btnPause').textContent = state.paused ? 'Tiếp tục khám' : 'Tạm dừng khám';
-      log(state.paused ? 'Bác sĩ tạm dừng khám' : 'Bác sĩ tiếp tục khám');
+      log((state.paused ? 'Bác sĩ tạm dừng khám' : 'Bác sĩ tiếp tục khám') +
+          ' → ghi trang_thai_id = ' + (state.paused ? 12 : 13));
       tick();
     };
     // NÚT DƯỚI CÙNG: đóng / mở phòng khám (trạng thái thứ 3).
@@ -418,7 +459,9 @@ STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.<
         state.paused = false;
         state.actionMessage = null;
       }
-      log(state.closed ? 'Đã đóng phòng khám — khoá thao tác gọi số' : 'Đã mở lại phòng khám');
+      log(state.closed
+        ? 'Đã đóng phòng khám — ghi trang_thai_id = 14, khoá thao tác gọi số'
+        : 'Đã mở lại phòng khám — ghi trang_thai_id = 13');
       tick();
     };
     $('btnOffline').onclick = () => {

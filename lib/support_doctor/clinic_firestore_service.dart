@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'department_room_picker.dart';
 import 'queue_screen.dart';
+import 'room_status.dart';
 
 /// Đọc danh sách khoa/phòng từ Cloud Firestore theo thời gian thực.
 ///
@@ -56,6 +57,16 @@ class ClinicFirestoreService {
   /// Collection gốc của phòng: PhongKham/{mã phòng}. Phòng của mọi
   /// bệnh viện nằm chung tại đây, lọc theo trường [roomHospitalField].
   static const String roomsCollection = 'PhongKham';
+
+  /// Mã trạng thái phòng khám trên `PhongKham/{roomId}` — xem bảng dùng
+  /// chung trong `room_status.dart`.
+  static const int roomStatusPausedId = kRoomStatusPausedId;
+  static const int roomStatusOpenId = kRoomStatusOpenId;
+  static const int roomStatusClosedId = kRoomStatusClosedId;
+
+  /// Tên trường lưu mã trạng thái (các biến thể nằm trong
+  /// [kRoomStatusFieldVariants]).
+  static const String roomStatusField = kRoomStatusField;
 
   /// Subcollection chứa danh sách khoa dưới mỗi bệnh viện.
   static const String listSubcollection = 'danh_sach';
@@ -170,6 +181,33 @@ class ClinicFirestoreService {
   Query<Map<String, dynamic>> _roomsOf(String hospitalId) => _firestore
       .collection(roomsCollection)
       .where(roomHospitalField, isEqualTo: hospitalId);
+
+  /// Nghe mã `trang_thai_id` của MỘT phòng theo thời gian thực.
+  /// Phát `null` khi document chưa có trường trạng thái (dữ liệu cũ).
+  Stream<int?> watchRoomStatusId({required String roomId}) => _firestore
+      .collection(roomsCollection)
+      .doc(roomId)
+      .snapshots()
+      .map(
+        (snapshot) => clinicRoomStatusId(
+          snapshot.data()?.cast<String, Object?>() ?? <String, Object?>{},
+        ),
+      );
+
+  /// Ghi mã trạng thái mới (12/13/14) lên `PhongKham/{roomId}`.
+  /// Dùng `set(merge: true)` để vẫn thêm được field khi document chưa có.
+  Future<void> updateRoomStatusId({
+    required String roomId,
+    required int statusId,
+  }) async {
+    await _firestore.collection(roomsCollection).doc(roomId).set(
+      <String, dynamic>{
+        roomStatusField: statusId,
+        'ngay_cap_nhat_trang_thai': FieldValue.serverTimestamp(),
+      },
+      SetOptions(merge: true),
+    );
+  }
 
   /// Theo dõi toàn bộ phòng của một bệnh viện theo thời gian thực.
   ///
@@ -546,6 +584,9 @@ class _FirestoreClinicRoomPickerScreenState
       hospitalId: widget.hospitalId,
       roomId: room.id,
     ),
+    roomStatus: _service.watchRoomStatusId(roomId: room.id),
+    setRoomStatus: (statusId) =>
+        _service.updateRoomStatusId(roomId: room.id, statusId: statusId),
     renumber: (appointmentId, soThuTu) => _service.updateAppointmentSoThuTu(
       appointmentId: appointmentId,
       soThuTu: soThuTu,
@@ -716,13 +757,43 @@ String clinicRoomDepartmentId(Map<String, Object?> data) =>
     ]) ??
     '';
 
+/// Đọc mã `trang_thai_id` của phòng khám từ document `PhongKham/{id}`.
+///
+/// Chấp nhận số (`12`) lẫn chuỗi (`"12"`) và vài biến thể tên trường để
+/// dữ liệu lệch chuẩn vẫn đọc được. Trả về `null` khi document chưa có
+/// trường trạng thái — lúc đó app dùng trạng thái phiên local như cũ.
+int? clinicRoomStatusId(Map<String, Object?> data) {
+  for (final key in kRoomStatusFieldVariants) {
+    final value = data[key];
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final number = int.tryParse(value.trim());
+      if (number != null) return number;
+    }
+  }
+  return null;
+}
+
+/// Ánh xạ mã trạng thái phòng sang enum dùng trong giao diện:
+/// `12` → Tạm dừng, `14` → Đã đóng, `13` / thiếu / mã lạ → Đang khám.
+ClinicRoomStatus clinicRoomStatusFromId(int? id) {
+  if (id == ClinicFirestoreService.roomStatusPausedId) {
+    return ClinicRoomStatus.paused;
+  }
+  if (id == ClinicFirestoreService.roomStatusClosedId) {
+    return ClinicRoomStatus.closed;
+  }
+  // 13 (đang khám), thiếu field hoặc mã lạ.
+  return ClinicRoomStatus.open;
+}
+
 /// Dựng [ClinicRoomData] cho một phòng từ dữ liệu document của nó.
 ///
 /// [departmentName] là tên khoa đã tra từ danh sách khoa; để trống thì
 /// lần lượt dùng trường `ten_khoa` ngay trong document phòng rồi tới mã
-/// khoa. Phòng mới lấy từ Firestore luôn ở trạng thái đang khám và chưa
-/// có số liệu chờ/đã khám — phần trạng thái thật do RoomSessionStore phủ
-/// lên khi phòng đã được mở trong phiên app.
+/// khoa. Trạng thái lấy từ `trang_thai_id` (12 tạm dừng / 13 đang khám /
+/// 14 đóng phòng); document chưa có trường thì RoomSessionStore phủ trạng
+/// thái phiên lên như cũ. Chưa có số liệu chờ/đã khám.
 /// Số hiện tại của phòng không suy ra từ document phòng; STT chỉ lấy
 /// từ danh sách LichHen và trạng thái phiên hàng chờ.
 ClinicRoomData clinicRoomFromFirestore({
@@ -732,6 +803,7 @@ ClinicRoomData clinicRoomFromFirestore({
   String departmentName = '',
 }) {
   final departmentId = clinicRoomDepartmentId(data);
+  final statusId = clinicRoomStatusId(data);
   final resolvedDepartmentName = departmentName.trim().isNotEmpty
       ? departmentName
       : (_firstStringField(data, const ['tenKhoaGoc', 'ten_khoa', 'tenKhoa']) ??
@@ -761,7 +833,8 @@ ClinicRoomData clinicRoomFromFirestore({
           'idNhanVien',
         ]) ??
         '',
-    status: ClinicRoomStatus.open,
+    status: clinicRoomStatusFromId(statusId),
+    trangThaiId: statusId,
     currentNumber: null,
     waitingCount: 0,
     examinedCount: 0,
