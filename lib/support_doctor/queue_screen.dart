@@ -349,6 +349,7 @@ class QueueScreen extends StatefulWidget {
     this.initialCurrent = 0,
     this.startingNumber = 0,
     this.appointmentQueueStream,
+    this.appointmentQueueForDay,
     this.onAppointmentOutcome,
     this.onRenumberAppointment,
     this.roomStatusStream,
@@ -384,6 +385,15 @@ class QueueScreen extends StatefulWidget {
   /// hình không tự tạo số nào; hàng chờ bắt đầu trống và chỉ có thể khôi
   /// phục trạng thái phiên đã nạp từ một luồng lịch hẹn trước đó.
   final Stream<AppointmentQueueUpdate>? appointmentQueueStream;
+
+  /// Hàm tạo luồng STT cho một ngày bất kỳ, dùng bởi bộ chọn lịch ngay
+  /// trên màn hình gọi số. Khi người dùng đổi ngày, màn hình hủy luồng cũ,
+  /// xoá trạng thái hàng chờ trên máy rồi nghe luồng của ngày mới.
+  ///
+  /// Nếu `null` (chế độ demo/offline), màn hình vẫn cho chọn ngày nhưng
+  /// dùng [appointmentQueueStream] như cũ.
+  final Stream<AppointmentQueueUpdate> Function(DateTime day)?
+  appointmentQueueForDay;
 
   /// Báo kết quả khám xong/vắng mặt về nơi lưu lịch hẹn.
   ///
@@ -459,6 +469,14 @@ class _QueueScreenState extends State<QueueScreen> {
   /// Mã trạng thái nhận gần nhất từ Firestore (`null` = chưa có field hợp lệ).
   int? _roomStatusId;
 
+  /// Ngày đang nạp lịch hẹn vào hàng chờ. Mặc định hôm nay; người đổi qua
+  /// bộ chọn lịch trên chính màn hình gọi số. Luôn chỉ còn phần ngày.
+  DateTime _selectedQueueDay = _queueDayOnly(DateTime.now());
+
+  /// Số hiệu lượt đăng ký luồng lịch hẹn. Tăng mỗi lần đổi ngày để bỏ qua
+  /// các đợt emit muộn của luồng cũ.
+  int _appointmentStreamGeneration = 0;
+
   /// Tập số lịch hẹn đủ điều kiện trong lần đồng bộ gần nhất.
   List<int> _eligibleAppointmentNumbers = <int>[];
 
@@ -468,7 +486,8 @@ class _QueueScreenState extends State<QueueScreen> {
 
   /// Ánh xạ tích luỹ số thứ tự → tên bệnh nhân của lịch hẹn tương ứng.
   /// Chỉ nhận dữ liệu từ các lịch hẹn đã qua bộ lọc đúng phòng/bệnh
-  /// viện, đúng ngày hôm nay trên máy và đúng trạng thái đủ điều kiện.
+  /// viện, đúng ngày đang chọn trên bộ chọn lịch và đúng trạng thái đủ
+  /// điều kiện.
   final Map<int, String> _patientNameByNumber = <int, String>{};
 
   /// Các số đã xác nhận vắng mặt trên máy này; không nạp lại từ luồng
@@ -596,7 +615,8 @@ class _QueueScreenState extends State<QueueScreen> {
       _lastStatusChangeLabel = snapshot.statusChangeLabel;
     } else {
       // Lần đầu mở phòng: KHÔNG tự sinh số thứ tự.
-      // Chỉ hiện số khi lịch hẹn thật của phòng hôm nay có `so_thu_tu`
+      // Chỉ hiện số khi lịch hẹn thật của phòng trong ngày đang chọn có
+      // `so_thu_tu`
       // (stream lịch hẹn sẽ nạp số vào); trước đó màn hình để trống
       // ("Chưa có bệnh nhân nào…") thay vì mặc định số 1.
       final start = widget.initialCurrent > 0 ? widget.initialCurrent : 0;
@@ -622,24 +642,9 @@ class _QueueScreenState extends State<QueueScreen> {
       );
     }
 
-    final appointmentStream = widget.appointmentQueueStream;
-    if (appointmentStream != null) {
-      _feedState = QueueFeedState.connecting;
-      _appointmentSubscription = appointmentStream.listen(
-        _applyAppointmentUpdate,
-        onError: (Object error, StackTrace stackTrace) {
-          if (mounted) {
-            // Đồng hồ vẫn chạy theo giờ máy, nhưng thẻ báo rõ là đang
-            // không nhận được dữ liệu realtime nữa.
-            setState(() => _feedState = QueueFeedState.error);
-            notify(
-              'Không tải được số thứ tự từ lịch hẹn. '
-              'Kiểm tra kết nối Firebase.',
-            );
-          }
-        },
-      );
-    }
+    // Đăng ký luồng lịch hẹn cho ngày đang chọn (mặc định hôm nay).
+    // Khi đổi lịch, hàm này sẽ hủy luồng cũ và nghe luồng của ngày mới.
+    _subscribeToAppointmentQueue(_selectedQueueDay);
 
     // Đẩy trạng thái ra kho chung sau khi frame đầu vẽ xong, để trang chính
     // (màn hình chọn khoa/phòng) nhận đúng thông tin khi quay lại.
@@ -650,6 +655,7 @@ class _QueueScreenState extends State<QueueScreen> {
 
   @override
   void dispose() {
+    _appointmentStreamGeneration++;
     _roomStatusSubscription?.cancel();
     _appointmentSubscription?.cancel();
     super.dispose();
@@ -673,6 +679,104 @@ class _QueueScreenState extends State<QueueScreen> {
       message = null;
     });
     _syncRoomState();
+  }
+
+  /// Đăng ký nghe luồng lịch hẹn của [day].
+  ///
+  /// Hủy đăng ký cũ trước, rồi dùng [QueueScreen.appointmentQueueForDay]
+  /// nếu có; nếu không có (demo/offline) dùng luồng cố định
+  /// [QueueScreen.appointmentQueueStream]. [generation] chặn các emit muộn
+  /// của luồng ngày cũ lọt sang ngày mới.
+  void _subscribeToAppointmentQueue(DateTime day) {
+    final generation = ++_appointmentStreamGeneration;
+    final previous = _appointmentSubscription;
+    _appointmentSubscription = null;
+    if (previous != null) unawaited(previous.cancel());
+    if (!mounted) return;
+
+    final stream =
+        widget.appointmentQueueForDay?.call(day) ??
+        widget.appointmentQueueStream;
+    if (stream == null) {
+      setState(() => _feedState = QueueFeedState.local);
+      return;
+    }
+
+    setState(() => _feedState = QueueFeedState.connecting);
+    _appointmentSubscription = stream.listen(
+      (update) {
+        if (generation == _appointmentStreamGeneration) {
+          _applyAppointmentUpdate(update);
+        }
+      },
+      onError: (Object _, StackTrace _) {
+        if (!mounted || generation != _appointmentStreamGeneration) return;
+        setState(() => _feedState = QueueFeedState.error);
+        notify(
+          'Không tải được số thứ tự từ lịch hẹn. '
+          'Kiểm tra kết nối Firebase.',
+        );
+      },
+    );
+  }
+
+  /// Xoá sạch trạng thái hàng chờ của ngày cũ trước khi nạp ngày mới.
+  /// Giữ nguyên trạng thái phòng (tạm dừng / đóng) và mốc giờ đã chụp.
+  void _resetQueueForSelectedDay() {
+    _daBatDau = false;
+    current = 0;
+    next = 0;
+    waiting = <int>[];
+    lastIssued = 0;
+    passed.clear();
+    _deferredHistory.clear();
+    _scheduledFutureInserts.clear();
+    _eligibleAppointmentNumbers = <int>[];
+    _appointmentIdByNumber.clear();
+    _patientNameByNumber.clear();
+    _absentAppointmentNumbers.clear();
+    _patientNameDaChoQua.clear();
+    _maLichHenDaChoQua.clear();
+    _pendingRenumberByAppointmentId.clear();
+    _requeuedAppointmentNumbers.clear();
+    selected = null;
+    message = null;
+    _feedState = QueueFeedState.connecting;
+  }
+
+  /// Mở lịch chọn ngày ngay trên màn hình gọi số.
+  ///
+  /// Cho chọn mọi ngày/tháng/năm trong khoảng rộng 1900–2100 để test; chỉ
+  /// chọn theo NGÀY (không chọn ca/khung giờ). Không đổi schema Firestore.
+  Future<void> _pickQueueDay() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedQueueDay,
+      firstDate: DateTime(1900, 1, 1),
+      lastDate: DateTime(2100, 12, 31),
+      helpText: 'Chọn lịch test hàng chờ',
+      confirmText: 'Chọn',
+      cancelText: 'Hủy',
+    );
+    if (!mounted || picked == null) return;
+    final day = _queueDayOnly(picked);
+    if (day == _selectedQueueDay) return;
+
+    setState(() {
+      _selectedQueueDay = day;
+      _resetQueueForSelectedDay();
+    });
+    _syncRoomState();
+    _subscribeToAppointmentQueue(day);
+
+    final coLocTheoNgay = widget.appointmentQueueForDay != null;
+    notify(
+      coLocTheoNgay
+          ? 'Đã chọn lịch ${_formatQueueDay(day)}. '
+                'Đang nạp lịch hẹn của ngày này.'
+          : 'Đã chọn lịch ${_formatQueueDay(day)}. '
+                'Luồng demo hiện không lọc theo ngày.',
+    );
   }
 
   /// Ghi 2 field snake_case `trang_thai_id` + `trang_thai` lên Firestore
@@ -1002,7 +1106,7 @@ class _QueueScreenState extends State<QueueScreen> {
             'để gọi số ${waiting.first}.';
       }
       return 'Chưa có bệnh nhân nào trong danh sách lịch hẹn đã xác nhận '
-          'của phòng hôm nay.\n'
+          'của phòng ngày ${_formatQueueDay(_selectedQueueDay)}.\n'
           'STT chỉ xuất hiện khi lịch hẹn được cập nhật vào danh sách.';
     }
     if (next <= 0) {
@@ -1125,7 +1229,7 @@ class _QueueScreenState extends State<QueueScreen> {
         title: const Text('Đặt lại số'),
         content: Text(
           'Đưa ${widget.roomName} về đúng danh sách lịch hẹn đã xác '
-          'nhận hôm nay?\n\n'
+          'nhận ngày ${_formatQueueDay(_selectedQueueDay)}?\n\n'
           '• Xoá toàn bộ số đã đợi, số đã khám ghi trên máy này và '
           'lịch chèn theo số mốc tương lai\n'
           '• Nạp lại số thứ tự từ các lịch hẹn đang ở trạng thái '
@@ -1183,7 +1287,7 @@ class _QueueScreenState extends State<QueueScreen> {
                 '${waiting.length} số đang chờ. Nhấn “Bắt đầu” để gọi số '
                 '${waiting.first}.'
           : 'Đã đặt lại hàng chờ. Hiện chưa có lịch hẹn đã xác nhận nào cho '
-                'phòng hôm nay.';
+                'phòng ngày ${_formatQueueDay(_selectedQueueDay)}.';
       _syncRoomState();
     });
     notify('Đã đặt lại hàng chờ của ${widget.roomName} theo lịch hẹn.');
@@ -2106,6 +2210,11 @@ class _QueueScreenState extends State<QueueScreen> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 14),
+                        _QueueDaySelector(
+                          day: _selectedQueueDay,
+                          onTap: () => unawaited(_pickQueueDay()),
+                        ),
                         const SizedBox(height: 20),
                         Row(
                           children: [
@@ -2457,7 +2566,8 @@ class _QueueScreenState extends State<QueueScreen> {
                           // Tạm dừng / Tiếp tục khám, không chạy liên tục.
                           footer: _LiveStatusFooter(
                             prefix:
-                                '${widget.roomName} · ${widget.departmentName}',
+                                '${widget.roomName} · ${widget.departmentName} · '
+                                '${_formatQueueDay(_selectedQueueDay)}',
                             paused: paused,
                             closed: closed,
                             feedState: _feedState,
@@ -4182,6 +4292,100 @@ class _StatusBanner extends StatelessWidget {
   }
 }
 
+/// Bỏ phần giờ, chỉ giữ ngày/tháng/năm để so sánh và truyền cho Firestore.
+DateTime _queueDayOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
+/// Ngày hiển thị trên bộ chọn lịch: `dd/MM/yyyy`.
+String _formatQueueDay(DateTime day) {
+  String haiChuSo(int value) => value.toString().padLeft(2, '0');
+  return '${haiChuSo(day.day)}/${haiChuSo(day.month)}/${day.year}';
+}
+
+/// Ô chọn lịch đặt ngay dưới tiêu đề màn hình gọi số.
+///
+/// Chỉ chọn theo NGÀY (không có ca/khung giờ). Bấm vào ô sẽ mở
+/// `showDatePicker` với dải năm rộng để test dữ liệu lịch hẹn cũ/mới.
+class _QueueDaySelector extends StatelessWidget {
+  const _QueueDaySelector({required this.day, required this.onTap});
+
+  final DateTime day;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _Ui.cardBorder),
+          boxShadow: _Ui.quietShadow,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEAF9F0),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.calendar_month_rounded,
+                color: _Ui.green,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'LỊCH TEST HÀNG CHỜ',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: _Ui.textSecondary,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Ngày ${_formatQueueDay(day)} · bấm để đổi',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w800,
+                      color: _Ui.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Chỉ chọn theo ngày · mọi ngày/tháng/năm',
+                    style: TextStyle(fontSize: 10.5, color: _Ui.textFaint),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.expand_more_rounded,
+              color: _Ui.textSecondary,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 /// Định dạng `HH:mm:ss` theo giờ địa phương của MÁY đang chạy app.
 /// Dùng cho MỘT MỐC THỜI ĐIỂM đã chụp (lúc bấm Tạm dừng / Tiếp tục
 /// khám), không phải cho đồng hồ chạy liên tục.
@@ -4210,13 +4414,13 @@ class _LiveStatusFooter extends StatelessWidget {
     required this.statusChangeLabel,
   });
 
-  /// "Tên phòng · Tên khoa" lấy từ phòng bác sĩ đang mở.
+  /// "Tên phòng · Tên khoa · Ngày đang chọn" lấy từ phòng bác sĩ đang mở.
   final String prefix;
   final bool paused;
   final bool closed;
   final QueueFeedState feedState;
 
-  /// `null` khi phòng hôm nay chưa bấm Tạm dừng / Tiếp tục lần nào.
+  /// `null` khi phiên này chưa bấm Tạm dừng / Tiếp tục lần nào.
   final DateTime? statusChangedAt;
   final String statusChangeLabel;
 

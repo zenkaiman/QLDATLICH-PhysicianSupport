@@ -1196,7 +1196,13 @@ class ClinicRoomData {
 /// luồng trạng thái đã đối chiếu từ 4 field của chính phòng, và các hàm
 /// ghi kết quả khám / số thứ tự / trạng thái về nơi lưu trữ.
 typedef ClinicAppointmentFeed = ({
+  /// Luồng STT của ngày hôm nay, giữ cho mã gọi cũ / chế độ demo.
   Stream<AppointmentQueueUpdate> updates,
+
+  /// Luồng STT cho MỘT ngày bất kỳ do bộ chọn lịch trên QueueScreen truyền
+  /// vào. Khi đổi ngày, QueueScreen hủy đăng ký cũ và nghe luồng mới này.
+  Stream<AppointmentQueueUpdate> Function(DateTime day) updatesForDay,
+
   Future<void> Function(String appointmentId, AppointmentOutcome outcome)
   reportOutcome,
 
@@ -1319,6 +1325,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
                 departmentName: room.department,
                 hospitalName: hospitalName,
                 appointmentQueueStream: appointmentFeed?.updates,
+                appointmentQueueForDay: appointmentFeed?.updatesForDay,
                 onAppointmentOutcome: appointmentFeed?.reportOutcome,
                 onRenumberAppointment: appointmentFeed?.renumber,
                 roomStatusStream: appointmentFeed?.roomStatus,

@@ -193,3 +193,30 @@ await DatabaseSeeder.seedRoomStatusId(
 phép nhân viên/bác sĩ đọc 4 field và ghi 2 field snake_case. Không thay đổi
 cấu hình Firebase, không tạo collection/subcollection mới, không thêm
 dependency, không thêm UI/test.
+
+## Chọn lịch trên màn hình gọi số (phục vụ test)
+
+Bộ chọn lịch được thêm **chỉ trên `QueueScreen`** (màn hình gọi số), ngay dưới
+tiêu đề phòng/khoa. Không thêm ở màn hình chọn khoa/phòng và không thêm cột
+nào trong `web/status_banner_realtime.html`.
+
+- Nút/ô `LỊCH TEST HÀNG CHỜ` mở `showDatePicker` với dải rộng
+  **1900–2100**, cho chọn **mọi ngày / tháng / năm** để test dữ liệu cũ lẫn
+  mới. Chỉ chọn **theo ngày**, không có ca/khung giờ.
+- Ngày mặc định là hôm nay theo giờ máy, hiển thị `dd/MM/yyyy` trên ô chọn
+  và trong footer của thẻ thông báo (`Phòng · Khoa · Ngày`).
+- Khi đổi ngày, `QueueScreen` hủy stream lịch hẹn cũ, xoá sạch trạng thái
+  hàng chờ trên máy (số hiện tại, số chờ, số đã qua, tên/mã lịch hẹn tạm),
+  rồi gọi `ClinicAppointmentFeed.updatesForDay(day)`. Hàm này trỏ tới
+  `ClinicFirestoreService.watchAppointmentQueue(day: day)`, nên STT và tên
+  bệnh nhân được nạp lại đúng theo `ngay_dat` / mã `LH_yyyyMMdd_...` của
+  ngày đã chọn.
+- Một biến số hiệu lượt đăng ký chặn các emit muộn của stream ngày cũ lọt
+  sang ngày mới. `ClinicAppointmentFeed.updates` vẫn giữ cho chế độ
+  demo/offline; nếu không có `updatesForDay`, ô chọn lịch vẫn hiện ngày
+  nhưng luồng dữ liệu không lọc theo ngày.
+- `sessionId`, `RoomSessionStore` và 4 field trạng thái phòng không đổi;
+  đổi ngày **không** chụp lại mốc giờ `HH:mm:ss` của lần Tạm dừng /
+  Tiếp tục khám, không đổi trạng thái tạm dừng / đóng phòng.
+- Không đổi schema Firestore, không tạo collection/subcollection mới, không
+  thêm dependency, không thêm test.
