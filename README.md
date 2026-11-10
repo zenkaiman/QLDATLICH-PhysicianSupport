@@ -153,18 +153,20 @@ Giá trị chuẩn của `trang_thai` chỉ là 3 từ `tam_dung` / `kham` / `do
   `trangThaiId` / `trangThai`, không xoá `hospitalId`, `khoaId`,
   `ten_phong` … đang có.
 - Khi document có field, **Firestore là nguồn sự thật**: màn hình chọn
-  khoa/phòng hiện nhãn đầy đủ kèm mã (`Tạm dừng khám · 12` …), chip lọc
-  `Đang khám (13)` / `Tạm dừng khám (12)` / `Đóng phòng khám (14)` và không
-  để trạng thái phiên local ghi đè lên.
+  khoa/phòng và chip lọc **chỉ hiện tên trạng thái** (`Tạm dừng khám`,
+  `Đang khám`, `Đóng phòng khám`), **không kèm `12/13/14`**. Id vẫn được
+  giữ nội bộ để đối chiếu 4 field và không để trạng thái phiên local ghi
+  đè lên.
 - Trên `QueueScreen`, bấm **Tạm dừng khám** ghi `12` + `tam_dung`,
   **Tiếp tục khám** / **Mở phòng khám** ghi `13` + `kham`,
   **Đóng phòng khám** ghi `14` + `dong` vào 2 field snake_case.
   Trạng thái từ thiết bị khác cũng cập nhật banner/nút ngay qua stream.
   Thay đổi từ Firestore **không chụp lại giờ máy**: mốc `HH:mm:ss` vẫn chỉ
   đổi khi bấm Tạm dừng / Tiếp tục trên chính thiết bị đó.
-- Thay đổi này **chỉ ở tầng Firebase**: không thêm cột/bảng UI, không đổi
-  chip lọc, thẻ phòng hay banner. `web/status_banner_realtime.html` vẫn giữ
-  bảng 12/13/14 và tô dòng đang áp dụng như trước.
+- Phần đọc/ghi 4 field vẫn **chỉ ở tầng Firebase**. Trên giao diện, chip
+  lọc, thẻ phòng, banner và `web/status_banner_realtime.html` **chỉ hiện
+  trạng thái, không hiện id**; bản preview vẫn tô dòng trạng thái đang áp
+  dụng bằng id nội bộ.
 
 ### Bổ sung field cho document phòng đã có
 
@@ -191,3 +193,30 @@ await DatabaseSeeder.seedRoomStatusId(
 phép nhân viên/bác sĩ đọc 4 field và ghi 2 field snake_case. Không thay đổi
 cấu hình Firebase, không tạo collection/subcollection mới, không thêm
 dependency, không thêm UI/test.
+
+## Chọn lịch trên màn hình gọi số (phục vụ test)
+
+Bộ chọn lịch được thêm **chỉ trên `QueueScreen`** (màn hình gọi số), ngay dưới
+tiêu đề phòng/khoa. Không thêm ở màn hình chọn khoa/phòng và không thêm cột
+nào trong `web/status_banner_realtime.html`.
+
+- Nút/ô `LỊCH TEST HÀNG CHỜ` mở `showDatePicker` với dải rộng
+  **1900–2100**, cho chọn **mọi ngày / tháng / năm** để test dữ liệu cũ lẫn
+  mới. Chỉ chọn **theo ngày**, không có ca/khung giờ.
+- Ngày mặc định là hôm nay theo giờ máy, hiển thị `dd/MM/yyyy` trên ô chọn
+  và trong footer của thẻ thông báo (`Phòng · Khoa · Ngày`).
+- Khi đổi ngày, `QueueScreen` hủy stream lịch hẹn cũ, xoá sạch trạng thái
+  hàng chờ trên máy (số hiện tại, số chờ, số đã qua, tên/mã lịch hẹn tạm),
+  rồi gọi `ClinicAppointmentFeed.updatesForDay(day)`. Hàm này trỏ tới
+  `ClinicFirestoreService.watchAppointmentQueue(day: day)`, nên STT và tên
+  bệnh nhân được nạp lại đúng theo `ngay_dat` / mã `LH_yyyyMMdd_...` của
+  ngày đã chọn.
+- Một biến số hiệu lượt đăng ký chặn các emit muộn của stream ngày cũ lọt
+  sang ngày mới. `ClinicAppointmentFeed.updates` vẫn giữ cho chế độ
+  demo/offline; nếu không có `updatesForDay`, ô chọn lịch vẫn hiện ngày
+  nhưng luồng dữ liệu không lọc theo ngày.
+- `sessionId`, `RoomSessionStore` và 4 field trạng thái phòng không đổi;
+  đổi ngày **không** chụp lại mốc giờ `HH:mm:ss` của lần Tạm dừng /
+  Tiếp tục khám, không đổi trạng thái tạm dừng / đóng phòng.
+- Không đổi schema Firestore, không tạo collection/subcollection mới, không
+  thêm dependency, không thêm test.

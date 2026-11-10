@@ -311,6 +311,8 @@ class ClinicFirestoreService {
 
   /// Theo dõi số thứ tự của một phòng từ các lịch hẹn đủ điều kiện
   /// trong ngày [day] (mặc định là hôm nay theo giờ của thiết bị).
+  /// Bộ chọn lịch trên QueueScreen truyền ngày đang chọn vào [day] để
+  /// nạp lại hàng chờ khi test dữ liệu ngày khác.
   ///
   /// Truy vấn chỉ lọc ở server theo `phong_kham_id` để không cần index
   /// tổ hợp; bệnh viện, trạng thái và ngày được lọc ở máy khách bằng
@@ -600,6 +602,11 @@ class _FirestoreClinicRoomPickerScreenState
     updates: _service.watchAppointmentQueue(
       hospitalId: widget.hospitalId,
       roomId: room.id,
+    ),
+    updatesForDay: (day) => _service.watchAppointmentQueue(
+      hospitalId: widget.hospitalId,
+      roomId: room.id,
+      day: day,
     ),
     roomStatus: _service.watchRoomStatusId(roomId: room.id),
     setRoomStatus: (statusId) =>
