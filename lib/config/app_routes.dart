@@ -21,6 +21,7 @@ import '../screens/patient/patient_notifications_screen.dart';
 import '../screens/receptionist/appointment_list_screen.dart';
 import '../screens/receptionist/check_in_screen.dart';
 import '../screens/receptionist/receptionist_home_screen.dart';
+import '../support_doctor/hardcoded_duty_notice_flow.dart';
 
 class AppRoutes {
   static const String login = '/login';
@@ -51,6 +52,10 @@ class AppRoutes {
 
   static const String adminDashboard = '/admin-dashboard';
 
+  /// Luồng giao diện hardcode tạm thời cho thông báo sai khoa trực.
+  /// Không đọc Firebase; chỉ phục vụ xem UI trước khi nối dữ liệu thật.
+  static const String hardcodedDutyNotice = '/hardcoded-duty-notice';
+
   static Map<String, WidgetBuilder> get routes => {
         login: (_) => const LoginScreen(),
         register: (_) => const RegisterScreen(),
@@ -73,5 +78,6 @@ class AppRoutes {
         staffManagement: (_) => const StaffManagementScreen(),
         statistics: (_) => const StatisticsScreen(),
         adminDashboard: (_) => const AdminDashboard(),
+        hardcodedDutyNotice: (_) => const HardcodedDutyNoticeFlow(),
       };
 }
