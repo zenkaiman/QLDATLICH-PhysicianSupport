@@ -518,29 +518,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _danger),
                 ),
               ),
-
-              // Lối vào TẠM THỜI cho luồng giao diện hardcode. Nút này chỉ
-              // mở màn hình mẫu, không đăng nhập, không đọc Firestore và
-              // không làm thay đổi luồng xác thực thật.
-              TextButton.icon(
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.hardcodedDutyNotice,
-                ),
-                icon: const Icon(
-                  Icons.assignment_late_outlined,
-                  size: 18,
-                  color: _primary,
-                ),
-                label: const Text(
-                  'Xem thông báo trực khoa (giao diện mẫu)',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _primary,
-                  ),
-                ),
-              ),
               const SizedBox(height: 24),
 
               // Support Hotline
