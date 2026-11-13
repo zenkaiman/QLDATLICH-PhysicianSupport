@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../screens/auth/login_screen.dart';
 import '../screens/letan_c1/letan_profile_tab_c1.dart';
+import 'hardcoded_duty_notice_flow.dart';
 import 'queue_screen.dart';
 import 'room_session_store.dart';
 import 'room_status.dart';
@@ -36,6 +37,7 @@ class DepartmentRoomPicker<T> extends StatefulWidget {
     this.onLogout,
     this.logoutLabel = 'Đăng xuất',
     this.confirmLogout = true,
+    this.showHardcodedDutyNoticeEntry = false,
   });
 
   /// Room data supplied by the app.
@@ -79,6 +81,12 @@ class DepartmentRoomPicker<T> extends StatefulWidget {
 
   /// Có hỏi xác nhận trước khi đăng xuất hay không.
   final bool confirmLogout;
+
+  /// Bật nút tạm mở luồng thông báo trực khoa hardcode. Mặc định tắt để
+  /// widget generic không đổi giao diện; `ClinicRoomPickerScreen` bật riêng
+  /// và điều hướng bằng [openHardcodedDutyNoticeFlow], không dùng route ngoài
+  /// `lib/support_doctor`.
+  final bool showHardcodedDutyNoticeEntry;
 
   @override
   State<DepartmentRoomPicker<T>> createState() =>
@@ -312,6 +320,10 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
                                 ],
                               ),
                             ),
+                            if (widget.showHardcodedDutyNoticeEntry) ...[
+                              _HardcodedDutyNoticeEntryButton(compact: compact),
+                              const SizedBox(width: 8),
+                            ],
                             const SizedBox(width: 10),
                             _PickerLogoutButton(
                               compact: compact,
@@ -895,6 +907,64 @@ class _PickerPulseDot extends StatelessWidget {
   );
 }
 
+/// Nút TẠM THỜI mở luồng thông báo trực khoa hardcode từ chính màn hình
+/// hỗ trợ bác sĩ. Chỉ hiện khi `showHardcodedDutyNoticeEntry` được bật;
+/// không dùng `AppRoutes`, không sửa `LoginScreen` và không đọc Firebase.
+class _HardcodedDutyNoticeEntryButton extends StatelessWidget {
+  const _HardcodedDutyNoticeEntryButton({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => openHardcodedDutyNoticeFlow(context),
+        child: Container(
+          height: 40,
+          padding: EdgeInsets.symmetric(horizontal: compact ? 11 : 13),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _PickerUi.border),
+            boxShadow: _PickerUi.quietShadow,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.assignment_late_outlined,
+                size: 18,
+                color: Color(0xFFB45309),
+              ),
+              if (!compact) ...[
+                const SizedBox(width: 6),
+                const Text(
+                  'Thông báo mẫu',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFB45309),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+
+    return compact
+        ? Tooltip(
+            message: 'Luồng thông báo trực khoa (hardcode)',
+            child: button,
+          )
+        : button;
+  }
+}
+
 /// Nút đăng xuất ở góc phải phần tiêu đề. Ẩn nhãn chữ khi màn hình hẹp,
 /// hiện vòng xoay khi đang xử lý đăng xuất.
 class _PickerLogoutButton extends StatelessWidget {
@@ -1301,6 +1371,8 @@ class ClinicRoomPickerScreen extends StatelessWidget {
         initialDepartment: initialDepartment,
         hospitalName: hospitalName,
         onLogout: onLogout,
+        // Lối vào luồng hardcode nằm hoàn toàn trong lib/support_doctor.
+        showHardcodedDutyNoticeEntry: true,
         departmentOf: (room) => room.department,
         hospitalIdOf: (room) => room.hospitalId,
         departmentIdOf: (room) => room.departmentId,

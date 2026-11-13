@@ -1,15 +1,31 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-/// LUỒNG GIAO DIỆN TẠM THỜI — KHÔNG ĐỌC / GHI FIREBASE.
+/// LUỒNG GIAO DIỆN TẠM THỜI — CHỈ NẰM TRONG `lib/support_doctor`.
 ///
-/// File này cố ý đứng riêng, không import `cloud_firestore`, không gọi service
-/// và không chèn vào luồng đăng nhập thật. Dữ liệu được tách thành từng field
-/// rõ ràng để sau này chỉ cần thay phần nguồn dữ liệu, còn widget thông báo
-/// giữ nguyên.
+/// Không import `cloud_firestore`, không gọi service, không chỉnh
+/// `LoginScreen`, `AppRoutes`, README hay thư mục `web/`. Mọi file tạo/sửa cho
+/// luồng này đều nằm trong `lib/support_doctor`. Dữ liệu được tách thành từng
+/// field rõ ràng để sau này chỉ cần thay phần nguồn dữ liệu, còn widget thông
+/// báo giữ nguyên.
 ///
 /// Các mã `maNhanVien` / `maKhoa` / `maPhong` / `maBenhVien` là dữ liệu nội
 /// bộ trong code: KHÔNG render lên giao diện. UI chỉ hiện tên và câu thông
 /// báo, đúng yêu cầu "phân rõ dữ liệu" nhưng "không hiện mã".
+///
+/// [openHardcodedDutyNoticeFlow] là điểm nối tuỳ chọn cho một widget sau này
+/// trong cùng thư mục; nó dùng `MaterialPageRoute` cục bộ, không cần route
+/// toàn cục và không đụng màn hình đăng nhập.
+void openHardcodedDutyNoticeFlow(BuildContext context) {
+  unawaited(
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => const HardcodedDutyNoticeFlow(),
+      ),
+    ),
+  );
+}
 class HardcodedDutyAssignment {
   const HardcodedDutyAssignment({
     required this.maNhanVien,

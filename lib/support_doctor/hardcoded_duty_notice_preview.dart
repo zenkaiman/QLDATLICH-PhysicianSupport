@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 
 import 'hardcoded_duty_notice_flow.dart';
 
-/// Điểm chạy RIÊNG cho luồng giao diện hardcode.
+/// Điểm chạy RIÊNG cho luồng giao diện hardcode, nằm hoàn toàn trong
+/// `lib/support_doctor`.
 ///
 /// Chạy bằng lệnh:
 /// `flutter run -t lib/support_doctor/hardcoded_duty_notice_preview.dart`
 ///
-/// File này không gọi `Firebase.initializeApp`, không đọc Firestore và không
-/// dùng `AppRoutes`, nên có thể mở ngay cả khi chưa có dữ liệu Firebase.
+/// Không gọi `Firebase.initializeApp`, không đọc Firestore, không dùng
+/// `AppRoutes` và không sửa `LoginScreen`. Có thể mở ngay cả khi chưa có dữ
+/// liệu Firebase. Bản xem trước HTML, nếu cần, cũng nằm cùng thư mục:
+/// `hardcoded_duty_notice_preview.html`.
 void main() => runApp(const HardcodedDutyNoticePreviewApp());
 
 class HardcodedDutyNoticePreviewApp extends StatelessWidget {
