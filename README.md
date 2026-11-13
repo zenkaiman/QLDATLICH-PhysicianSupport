@@ -220,3 +220,34 @@ nào trong `web/status_banner_realtime.html`.
   Tiếp tục khám, không đổi trạng thái tạm dừng / đóng phòng.
 - Không đổi schema Firestore, không tạo collection/subcollection mới, không
   thêm dependency, không thêm test.
+
+## Luồng thông báo trực khoa (giao diện hardcode tạm thời)
+
+Đây là **luồng giao diện riêng**, chưa nối dữ liệu Firebase, để chuẩn bị sẵn
+thông báo cho trường hợp bác sĩ mở sai khoa. Dùng tạm thời trước khi thay
+bằng dữ liệu thật; không ảnh hưởng luồng đăng nhập, màn hình chọn phòng,
+`QueueScreen`, `RoomSessionStore` hay schema Firestore.
+
+- `lib/support_doctor/hardcoded_duty_notice_flow.dart`: dữ liệu mẫu và UI.
+  `HardcodedDutyAssignment` tách rõ `maNhanVien`, `maKhoa`, `maPhong`,
+  `maBenhVien` cùng tên hiển thị; `HardcodedRoomContext` cũng có mã khoa/mã
+  phòng riêng. Việc đúng/sai khoa được so sánh bằng **mã trong code**, còn
+  giao diện **không hiện mã nào**.
+- Thông báo nêu rõ khoa đang trực thật:
+  `Hiện bạn không trực khoa này, bạn đang trực ở Khoa Tim mạch.`
+  Khi chọn đúng khoa, card chuyển sang trạng thái `ĐÚNG KHOA TRỰC`.
+- Có 3 khoa/phòng mẫu để bấm thử và nút `Về khoa / phòng được phân công`.
+  Toàn bộ là `const`/state cục bộ: không `Firebase.initializeApp`, không
+  `cloud_firestore`, không đọc/ghi document, không `DateTime.now()`.
+- Hai cách mở:
+  - Trong app: route `AppRoutes.hardcodedDutyNotice`, có một nút tạm trên
+    `LoginScreen` để vào nhanh.
+  - Chạy riêng không cần Firebase:
+    `flutter run -t lib/support_doctor/hardcoded_duty_notice_preview.dart`.
+- `web/hardcoded_duty_notice_preview.html` là bản xem trước tĩnh của cùng
+  giao diện. Dữ liệu mẫu trong JS cũng tách riêng các mã nhưng không render
+  chúng lên màn hình.
+
+Không thêm dependency, không thêm file test, không chạy analyzer/test. Khi
+có dữ liệu thật, chỉ thay lớp nguồn dữ liệu hardcode; widget thông báo giữ
+nguyên cấu trúc dữ liệu đã tách sẵn.

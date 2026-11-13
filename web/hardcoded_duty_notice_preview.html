@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thông báo trực khoa · giao diện hardcode</title>
+  <style>
+    :root {
+      --primary: #1e78e0;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --amber: #b45309;
+      --amber-bg: #fff7e6;
+      --green: #15803d;
+      --green-bg: #ecfdf3;
+      --page: #f1f5f9;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--page);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .appbar {
+      height: 60px;
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      font-weight: 800;
+      font-size: 17px;
+    }
+    .wrap {
+      max-width: 620px;
+      margin: 0 auto;
+      padding: 22px 18px 40px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: var(--primary);
+      font-size: 11.5px;
+      font-weight: 700;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      margin-top: 14px;
+    }
+    .eyebrow {
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: .6px;
+      color: var(--muted);
+    }
+    .hospital { font-size: 18px; font-weight: 800; margin-top: 8px; }
+    .staff { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+    .divider { height: 1px; background: var(--line); margin: 14px 0; }
+    .line { display: flex; gap: 12px; margin-top: 8px; font-size: 13px; }
+    .line .label { width: 112px; color: var(--muted); flex: 0 0 auto; }
+    .line .value { font-weight: 700; }
+    .notice { margin-top: 18px; border-radius: 20px; padding: 18px; border: 1px solid; }
+    .notice.wrong { background: var(--amber-bg); border-color: rgba(180, 83, 9, .28); color: var(--amber); }
+    .notice.ok { background: var(--green-bg); border-color: rgba(21, 128, 61, .28); color: var(--green); }
+    .notice-head { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 900; letter-spacing: .6px; }
+    .notice-icon { font-size: 20px; line-height: 1; }
+    .notice-message { font-size: 16px; line-height: 1.45; font-weight: 800; margin: 12px 0 8px; }
+    .notice-hint { font-size: 12.5px; line-height: 1.4; opacity: .9; }
+    .back {
+      display: none;
+      width: 100%;
+      margin-top: 16px;
+      border: 0;
+      border-radius: 12px;
+      padding: 13px 16px;
+      background: var(--amber);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .back.show { display: block; }
+    .section { margin-top: 18px; font-size: 11px; font-weight: 800; letter-spacing: .6px; color: var(--muted); }
+    .room {
+      width: 100%;
+      margin-top: 10px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+      cursor: pointer;
+      transition: border-color .15s ease, background .15s ease;
+    }
+    .room:hover { border-color: #93c5fd; }
+    .room.selected { background: #eff6ff; border-color: var(--primary); }
+    .radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #94a3b8; flex: 0 0 auto; }
+    .room.selected .radio { border: 6px solid var(--primary); background: #fff; }
+    .room-info { flex: 1 1 auto; min-width: 0; }
+    .room-name { font-size: 14px; font-weight: 800; }
+    .room-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .assigned {
+      flex: 0 0 auto;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: var(--green-bg);
+      color: var(--green);
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+    .footer {
+      margin-top: 20px;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="appbar">Thông báo trực khoa</div>
+  <main class="wrap">
+    <div class="badge">
+      <span aria-hidden="true">▣</span>
+      Luồng tạm · dữ liệu mẫu · chưa kết nối dữ liệu thật
+    </div>
+
+    <section class="card" aria-label="Bối cảnh đang mở">
+      <div class="eyebrow">BỐI CẢNH ĐANG MỞ</div>
+      <div class="hospital" id="hospitalName"></div>
+      <div class="staff" id="staffName"></div>
+      <div class="divider"></div>
+      <div class="line"><span class="label">Khoa đang mở</span><span class="value" id="selectedDepartment"></span></div>
+      <div class="line"><span class="label">Phòng đang mở</span><span class="value" id="selectedRoom"></span></div>
+    </section>
+
+    <section class="notice wrong" id="noticeCard" aria-live="polite">
+      <div class="notice-head">
+        <span class="notice-icon" id="noticeIcon" aria-hidden="true">!</span>
+        <span id="noticeTitle"></span>
+      </div>
+      <div class="notice-message" id="noticeMessage"></div>
+      <div class="notice-hint" id="noticeHint"></div>
+      <button class="back show" id="backButton" type="button">
+        Về khoa / phòng được phân công
+      </button>
+    </section>
+
+    <div class="section">CHỌN KHOA / PHÒNG TRONG DỮ LIỆU MẪU</div>
+    <div id="roomList"></div>
+
+    <p class="footer">
+      Bản xem trước tĩnh cho giao diện Flutter. Các mã nhân viên, mã khoa và mã
+      phòng được tách riêng trong dữ liệu mẫu của mã nguồn nhưng không hiển thị
+      trên giao diện. Không có Firebase, không có dữ liệu thật.
+    </p>
+  </main>
+
+  <script>
+    // DỮ LIỆU HARDCODE: các mã được tách thành field riêng trong code để sau
+    // này thay bằng nguồn dữ liệu thật. Không field nào được render lên UI.
+    const hardcodedDuty = {
+      maNhanVien: 'BV502_BS_TM_01',
+      hoTen: 'BS. Nguyễn Văn A',
+      maKhoa: 'BV502_K001',
+      tenKhoa: 'Khoa Tim mạch',
+      maPhong: 'BV502_K001_HH001',
+      tenPhong: 'Phòng Tim mạch 1',
+      maBenhVien: 'BV502',
+      tenBenhVien: 'Bệnh viện Đa khoa Mẫu',
+    };
+
+    const hardcodedRooms = [
+      {
+        maKhoa: 'BV502_K002',
+        tenKhoa: 'Khoa Nhi',
+        maPhong: 'BV502_K002_HH001',
+        tenPhong: 'Phòng Nhi 1',
+        maBenhVien: 'BV502',
+        tenBenhVien: 'Bệnh viện Đa khoa Mẫu',
+      },
+      {
+        maKhoa: hardcodedDuty.maKhoa,
+        tenKhoa: hardcodedDuty.tenKhoa,
+        maPhong: hardcodedDuty.maPhong,
+        tenPhong: hardcodedDuty.tenPhong,
+        maBenhVien: hardcodedDuty.maBenhVien,
+        tenBenhVien: hardcodedDuty.tenBenhVien,
+      },
+      {
+        maKhoa: 'BV502_K003',
+        tenKhoa: 'Khoa Nội tổng quát',
+        maPhong: 'BV502_K003_HH001',
+        tenPhong: 'Phòng Nội 1',
+        maBenhVien: 'BV502',
+        tenBenhVien: 'Bệnh viện Đa khoa Mẫu',
+      },
+    ];
+
+    let selectedIndex = 0;
+
+    const el = (id) => document.getElementById(id);
+
+    function assignedRoomContext() {
+      return {
+        maKhoa: hardcodedDuty.maKhoa,
+        tenKhoa: hardcodedDuty.tenKhoa,
+        maPhong: hardcodedDuty.maPhong,
+        tenPhong: hardcodedDuty.tenPhong,
+        maBenhVien: hardcodedDuty.maBenhVien,
+        tenBenhVien: hardcodedDuty.tenBenhVien,
+      };
+    }
+
+    function render() {
+      const selected = hardcodedRooms[selectedIndex] || assignedRoomContext();
+      const wrongDepartment = selected.maKhoa !== hardcodedDuty.maKhoa;
+      const noticeCard = el('noticeCard');
+      const backButton = el('backButton');
+
+      el('hospitalName').textContent = hardcodedDuty.tenBenhVien;
+      el('staffName').textContent = hardcodedDuty.hoTen;
+      el('selectedDepartment').textContent = selected.tenKhoa;
+      el('selectedRoom').textContent = selected.tenPhong;
+
+      noticeCard.className = 'notice ' + (wrongDepartment ? 'wrong' : 'ok');
+      el('noticeIcon').textContent = wrongDepartment ? '!' : '✓';
+      el('noticeTitle').textContent = wrongDepartment
+        ? 'KHÔNG ĐÚNG KHOA TRỰC'
+        : 'ĐÚNG KHOA TRỰC';
+      el('noticeMessage').textContent = wrongDepartment
+        ? `Hiện bạn không trực khoa này, bạn đang trực ở ${hardcodedDuty.tenKhoa}.`
+        : 'Bạn đang đúng khoa trực. Có thể tiếp tục.';
+      el('noticeHint').textContent = wrongDepartment
+        ? `Vui lòng quay lại ${hardcodedDuty.tenKhoa} · ${hardcodedDuty.tenPhong} để tiếp tục công việc được phân công.`
+        : `${hardcodedDuty.tenKhoa} · ${hardcodedDuty.tenPhong}`;
+      backButton.className = wrongDepartment ? 'back show' : 'back';
+
+      const list = el('roomList');
+      list.textContent = '';
+      hardcodedRooms.forEach((room, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'room' + (index === selectedIndex ? ' selected' : '');
+
+        const radio = document.createElement('span');
+        radio.className = 'radio';
+        radio.setAttribute('aria-hidden', 'true');
+
+        const info = document.createElement('span');
+        info.className = 'room-info';
+        const name = document.createElement('span');
+        name.className = 'room-name';
+        name.textContent = room.tenKhoa;
+        const sub = document.createElement('span');
+        sub.className = 'room-sub';
+        sub.textContent = room.tenPhong;
+        info.append(name, document.createElement('br'), sub);
+
+        button.append(radio, info);
+        if (room.maKhoa === hardcodedDuty.maKhoa) {
+          const chip = document.createElement('span');
+          chip.className = 'assigned';
+          chip.textContent = 'Được phân công';
+          button.append(chip);
+        }
+        button.addEventListener('click', () => {
+          selectedIndex = index;
+          render();
+        });
+        list.append(button);
+      });
+    }
+
+    el('backButton').addEventListener('click', () => {
+      const assignedIndex = hardcodedRooms.findIndex(
+        (room) => room.maKhoa === hardcodedDuty.maKhoa,
+      );
+      selectedIndex = assignedIndex >= 0 ? assignedIndex : 1;
+      render();
+    });
+
+    render();
+  </script>
+</body>
+</html>
