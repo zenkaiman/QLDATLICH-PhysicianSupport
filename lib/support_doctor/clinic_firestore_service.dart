@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'department_room_picker.dart';
+import 'duty_assignment_guard.dart';
 import 'queue_screen.dart';
 import 'room_status.dart';
 
@@ -47,6 +48,12 @@ import 'room_status.dart';
 class ClinicFirestoreService {
   ClinicFirestoreService({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  /// Firestore instance dùng chung cho các tiện ích chỉ đọc trong
+  /// `support_doctor` (ví dụ kiểm tra phân công trực trước khi vào phòng).
+  /// Giữ cùng instance với service để luồng nào inject Firestore giả lập
+  /// cũng dùng chung nguồn.
+  FirebaseFirestore get firestore => _firestore;
 
   /// Collection bệnh viện: BenhVien/{hospitalId} (ví dụ BenhVien/BV001).
   static const String hospitalsCollection = 'BenhVien';
@@ -577,6 +584,7 @@ class FirestoreClinicRoomPickerScreen extends StatefulWidget {
 class _FirestoreClinicRoomPickerScreenState
     extends State<FirestoreClinicRoomPickerScreen> {
   late final ClinicFirestoreService _service;
+  late final DutyAssignmentGuard _dutyGuard;
   late Stream<List<ClinicRoomData>> _roomsStream;
   Stream<String>? _hospitalNameStream;
 
@@ -584,6 +592,7 @@ class _FirestoreClinicRoomPickerScreenState
   void initState() {
     super.initState();
     _service = widget.service ?? ClinicFirestoreService();
+    _dutyGuard = DutyAssignmentGuard(firestore: _service.firestore);
     _roomsStream = _service.watchRooms(hospitalId: widget.hospitalId);
     if (widget.hospitalName == null) {
       _hospitalNameStream = _service.watchHospitalName(
@@ -652,6 +661,19 @@ class _FirestoreClinicRoomPickerScreenState
             hospitalName: hospitalName,
             onLogout: widget.onLogout,
             appointmentFeedFor: _appointmentFeedForRoom,
+            beforeRoomSelected: (context, room) => _dutyGuard.checkAndNotify(
+              context,
+              DutyRoomContext(
+                hospitalId: room.hospitalId.trim().isNotEmpty
+                    ? room.hospitalId
+                    : widget.hospitalId,
+                departmentId: room.departmentId,
+                roomId: room.id,
+                departmentName: room.department,
+                roomName: room.name,
+                staffId: room.staffId,
+              ),
+            ),
           );
         },
       );
