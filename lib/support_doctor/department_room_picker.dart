@@ -1257,12 +1257,15 @@ typedef ClinicAppointmentFeed = ({
 /// Dùng chung cho việc bấm thẻ phòng và bấm một dòng lịch trực hợp lệ.
 /// Guard (nếu có) phải được gọi trước khi gọi hàm này. `NavigatorState`
 /// được truyền sẵn để không phải dùng lại `BuildContext` sau một `await`.
+///
+/// [initialQueueDay] là ngày nạp lịch hẹn lúc mở màn hình; `null` = hôm nay.
 Future<void> pushClinicQueueScreen(
   NavigatorState navigator, {
   required ClinicRoomData room,
   required String hospitalName,
   required ClinicAppointmentFeed? Function(ClinicRoomData room)?
   appointmentFeedFor,
+  DateTime? initialQueueDay,
 }) async {
   final appointmentFeed = appointmentFeedFor?.call(room);
   await navigator.push<void>(
@@ -1280,6 +1283,7 @@ Future<void> pushClinicQueueScreen(
         onRenumberAppointment: appointmentFeed?.renumber,
         roomStatusStream: appointmentFeed?.roomStatus,
         onRoomStatusChanged: appointmentFeed?.setRoomStatus,
+        initialQueueDay: initialQueueDay,
       ),
     ),
   );
@@ -1389,16 +1393,14 @@ class ClinicRoomPickerScreen extends StatelessWidget {
         examinedCountOf: (room) => room.examinedCount,
         beforeRoomSelected: beforeRoomSelected,
         scheduleHeader: scheduleHeader,
-        onRoomSelected: (room) async {
-          final navigator = Navigator.of(context);
-          final guard = beforeRoomSelected;
-          if (guard != null && !await guard(context, room)) return;
-          if (!navigator.mounted) return;
-          await pushClinicQueueScreen(
-            navigator,
-            room: room,
-            hospitalName: hospitalName,
-            appointmentFeedFor: appointmentFeedFor,
+        onRoomSelected: (room) {
+          unawaited(
+            pushClinicQueueScreen(
+              Navigator.of(context),
+              room: room,
+              hospitalName: hospitalName,
+              appointmentFeedFor: appointmentFeedFor,
+            ),
           );
         },
       );

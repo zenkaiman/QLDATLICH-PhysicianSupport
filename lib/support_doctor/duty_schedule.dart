@@ -33,7 +33,8 @@ class DutyScheduleEntry {
 
   final String dateLabel;
 
-  /// `yyyy-MM-dd` lấy từ field `ngay`, dùng để sắp xếp và so với ngày máy.
+  /// `yyyy-MM-dd` lấy từ field `ngay`, dùng để sắp xếp, làm ngày nạp hàng
+  /// chờ và đối chiếu phân công khi bấm vào dòng lịch.
   final String dateSortKey;
   final String departmentName;
   final String roomName;

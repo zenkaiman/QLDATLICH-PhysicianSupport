@@ -76,7 +76,8 @@ class DutyAssignmentDecision {
 /// Kiểm tra phân công trực trước khi cho bác sĩ vào `QueueScreen`.
 ///
 /// - Nguồn: Firestore thật. Chỉ nhận document có field `ngay` đúng ngày
-///   hiện tại `yyyy-MM-dd`; KHÔNG lọc theo `id` hay document ID.
+///   đang xét `yyyy-MM-dd` (mặc định hôm nay; khi mở phòng từ thẻ lịch
+///   trực thì là ngày của dòng lịch đó); KHÔNG lọc theo `id` hay document ID.
 /// - Chỉ nhận `trang_thai_id = 16` (hoặc alias id trạng thái); mọi id khác
 ///   hoặc thiếu id trạng thái → bỏ document đó.
 /// - Mã nhân viên lấy từ đúng document `NhanVien/{bv}/danh_sach/{...}`:
@@ -97,13 +98,19 @@ class DutyAssignmentGuard {
   final FirebaseFirestore _firestore;
   final DateTime Function() _now;
 
-  Future<DutyAssignmentDecision> evaluate(DutyRoomContext room) async {
+  /// [day] cho phép đối chiếu theo ngày đang test thay vì ngày máy: khi mở
+  /// phòng từ một dòng lịch trực, ngày của chính dòng lịch đó được truyền
+  /// vào để màn hình gọi số nạp đúng lịch hẹn của ngày đó.
+  Future<DutyAssignmentDecision> evaluate(
+    DutyRoomContext room, {
+    DateTime? day,
+  }) async {
     final hospitalId = room.hospitalId.trim();
     if (hospitalId.isEmpty) {
       return const DutyAssignmentDecision.blocked(kDutyReadErrorMessage);
     }
 
-    final today = _dateOnly(_now());
+    final today = _dateOnly(day ?? _now());
     Set<String> staffAliases;
     try {
       staffAliases = await _resolveCurrentStaffAliases(hospitalId);
@@ -214,9 +221,10 @@ class DutyAssignmentGuard {
   /// chặn `onRoomSelected`, đồng thời tự hiện dialog báo lỗi.
   Future<bool> checkAndNotify(
     BuildContext context,
-    DutyRoomContext room,
-  ) async {
-    final decision = await evaluate(room);
+    DutyRoomContext room, {
+    DateTime? day,
+  }) async {
+    final decision = await evaluate(room, day: day);
     if (decision.allowed) return true;
     if (!context.mounted) return false;
     await showDialog<void>(

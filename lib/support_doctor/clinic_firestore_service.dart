@@ -641,11 +641,15 @@ class _FirestoreClinicRoomPickerScreenState
         ),
   );
 
-  String _todayKey() {
-    final now = DateTime.now();
-    return '${now.year.toString().padLeft(4, '0')}-'
-        '${now.month.toString().padLeft(2, '0')}-'
-        '${now.day.toString().padLeft(2, '0')}';
+  /// Đổi `yyyy-MM-dd` của dòng lịch thành [DateTime] chỉ gồm phần ngày.
+  DateTime? _scheduleDay(DutyScheduleEntry schedule) {
+    final parts = schedule.dateSortKey.split('-');
+    if (parts.length != 3) return null;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
   }
 
   void _showScheduleMessage(
@@ -705,8 +709,12 @@ class _FirestoreClinicRoomPickerScreenState
     return null;
   }
 
-  /// Bấm một dòng lịch cụ thể: chỉ `trang_thai_id = 16` VÀ `ngay` đúng
-  /// ngày máy mới được tìm phòng, qua guard rồi mở thẳng `QueueScreen`.
+  /// Bấm một dòng lịch cụ thể: chỉ dòng có `trang_thai_id = 16` mới được
+  /// tìm phòng, qua guard rồi mở thẳng `QueueScreen`.
+  ///
+  /// Ngày của dòng lịch được dùng làm ngày nạp hàng chờ và cũng là ngày đối
+  /// chiếu phân công, nên bấm lịch của ngày nào thì lịch hẹn trong
+  /// `QueueScreen` đổi theo ngày đó (phục vụ test dữ liệu nhiều ngày).
   Future<void> _openScheduleRoom(
     BuildContext context, {
     required List<ClinicRoomData> rooms,
@@ -725,8 +733,10 @@ class _FirestoreClinicRoomPickerScreenState
       );
       return;
     }
-    if (schedule.dateSortKey != _todayKey()) {
-      _showScheduleMessage(messenger, 'Chưa tới ngày trực.');
+
+    final scheduleDay = _scheduleDay(schedule);
+    if (scheduleDay == null) {
+      _showScheduleMessage(messenger, 'Không đọc được ngày trực.');
       return;
     }
 
@@ -748,6 +758,7 @@ class _FirestoreClinicRoomPickerScreenState
         roomName: room.name,
         staffId: room.staffId,
       ),
+      day: scheduleDay,
     );
     if (!allowed || !navigator.mounted) return;
     await pushClinicQueueScreen(
@@ -755,6 +766,7 @@ class _FirestoreClinicRoomPickerScreenState
       room: room,
       hospitalName: hospitalName,
       appointmentFeedFor: _appointmentFeedForRoom,
+      initialQueueDay: scheduleDay,
     );
   }
 

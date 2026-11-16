@@ -354,6 +354,7 @@ class QueueScreen extends StatefulWidget {
     this.onRenumberAppointment,
     this.roomStatusStream,
     this.onRoomStatusChanged,
+    this.initialQueueDay,
   });
 
   /// Mã phiên khám – gom các lượt của cùng một buổi/ngày.
@@ -420,6 +421,13 @@ class QueueScreen extends StatefulWidget {
   /// Tạm dừng / Tiếp tục hoặc Đóng / Mở phòng khám.
   final Future<void> Function(int statusId)? onRoomStatusChanged;
 
+  /// Ngày nạp lịch hẹn lúc mở màn hình. `null` = hôm nay.
+  ///
+  /// Dùng khi mở phòng từ một dòng lịch trực: truyền đúng ngày của dòng
+  /// lịch đó để hàng chờ nạp lịch hẹn của ngày trực thay vì ngày máy. Người
+  /// dùng vẫn đổi được ngày bằng bộ chọn lịch trên màn hình gọi số.
+  final DateTime? initialQueueDay;
+
   @override
   State<QueueScreen> createState() => _QueueScreenState();
 }
@@ -469,9 +477,11 @@ class _QueueScreenState extends State<QueueScreen> {
   /// Mã trạng thái nhận gần nhất từ Firestore (`null` = chưa có field hợp lệ).
   int? _roomStatusId;
 
-  /// Ngày đang nạp lịch hẹn vào hàng chờ. Mặc định hôm nay; người đổi qua
-  /// bộ chọn lịch trên chính màn hình gọi số. Luôn chỉ còn phần ngày.
-  DateTime _selectedQueueDay = _queueDayOnly(DateTime.now());
+  /// Ngày đang nạp lịch hẹn vào hàng chờ. Mặc định hôm nay hoặc ngày trực
+  /// được truyền từ thẻ lịch; người đổi qua bộ chọn lịch trên chính màn
+  /// hình gọi số. Luôn chỉ còn phần ngày.
+  late DateTime _selectedQueueDay =
+      _queueDayOnly(widget.initialQueueDay ?? DateTime.now());
 
   /// Số hiệu lượt đăng ký luồng lịch hẹn. Tăng mỗi lần đổi ngày để bỏ qua
   /// các đợt emit muộn của luồng cũ.
