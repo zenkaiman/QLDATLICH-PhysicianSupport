@@ -244,6 +244,11 @@ class DutyAssignmentGuard {
   /// Đọc đúng document `NhanVien/{bv}/danh_sach/{...}` của nhân viên đang
   /// đăng nhập để lấy toàn bộ alias mã/id, rồi mới đem so với `PhanCong`.
   /// Không tìm thấy doc → trả set rỗng để `evaluate` chặn (fail-closed).
+  /// Alias mã/id của nhân viên hiện tại để các widget khác (ví dụ thẻ lịch
+  /// trực) dùng chung mà không phải đọc lại `NhanVien` theo cách khác.
+  Future<Set<String>> resolveCurrentStaffAliases(String hospitalId) =>
+      _resolveCurrentStaffAliases(hospitalId);
+
   Future<Set<String>> _resolveCurrentStaffAliases(String hospitalId) async {
     final profile = DuLieuProfileMauC1.thongTinHienTai;
     User? authUser;
@@ -481,6 +486,11 @@ bool _matchesAny(Iterable<String> values, Iterable<String> targets) {
   }
   return false;
 }
+
+/// Dùng chung cho thẻ lịch trực: đối chiếu một mã nhân viên trong
+/// `PhanCong` với bộ alias lấy từ document `NhanVien` hiện tại.
+bool dutyIdentifierMatches(String value, Iterable<String> aliases) =>
+    _matchesAny(<String>{value}, aliases);
 
 /// So sánh linh hoạt: bỏ dấu / hoa thường, chấp nhận mã ngắn là hậu tố
 /// (`K001` ↔ `BV502_K001`), tiền tố hoặc một đoạn có dấu phân cách

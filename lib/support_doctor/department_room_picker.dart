@@ -36,6 +36,7 @@ class DepartmentRoomPicker<T> extends StatefulWidget {
     required this.examinedCountOf,
     required this.onRoomSelected,
     this.beforeRoomSelected,
+    this.scheduleHeader,
     this.initialDepartment,
     this.hospitalName = 'Bệnh viện',
     this.title = 'Chọn phòng khám',
@@ -67,6 +68,10 @@ class DepartmentRoomPicker<T> extends StatefulWidget {
   /// Kiểm tra điều kiện vào phòng (ví dụ đúng khoa / phòng được phân công).
   /// Khi `null`, giữ nguyên hành vi bấm là vào phòng ngay.
   final RoomEntryGuard<T>? beforeRoomSelected;
+
+  /// Widget lịch trực của nhân viên hiện tại, chèn ngay trên cùng sau tiêu đề.
+  /// `null` cho các luồng demo/offline không có dữ liệu Firestore.
+  final Widget? scheduleHeader;
 
   /// Khoa mặc định (giữ lại để tương thích với mã gọi cũ). Trang chọn nay
   /// luôn mở ở bước chọn khoa nên giá trị này không còn tự đưa người dùng
@@ -333,6 +338,10 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
                           ],
                         ),
                         SizedBox(height: compact ? 16 : 20),
+                        if (widget.scheduleHeader != null) ...[
+                          widget.scheduleHeader!,
+                          SizedBox(height: compact ? 16 : 20),
+                        ],
                         if (_choosingDepartment) ...[
                           const Text(
                             'CHỌN KHOA',
@@ -1256,6 +1265,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
     this.onLogout,
     this.appointmentFeedFor,
     this.beforeRoomSelected,
+    this.scheduleHeader,
   });
 
   final List<ClinicRoomData> rooms;
@@ -1290,6 +1300,10 @@ class ClinicRoomPickerScreen extends StatelessWidget {
   /// Guard tuỳ chọn do luồng Firestore truyền vào để chặn phòng không đúng
   /// phân công. Luồng demo/offline không truyền thì giữ nguyên hành vi cũ.
   final RoomEntryGuard<ClinicRoomData>? beforeRoomSelected;
+
+  /// Thẻ lịch trực realtime của nhân viên đang đăng nhập. Luồng Firestore
+  /// truyền vào; luồng demo/offline để `null` nên không thay đổi giao diện.
+  final Widget? scheduleHeader;
 
   /// Danh sách phòng kèm trạng thái/số liệu thật lấy từ [RoomSessionStore]
   /// (phòng chưa mở lần nào thì giữ nguyên dữ liệu ban đầu).
@@ -1341,6 +1355,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
         waitingCountOf: (room) => room.waitingCount,
         examinedCountOf: (room) => room.examinedCount,
         beforeRoomSelected: beforeRoomSelected,
+        scheduleHeader: scheduleHeader,
         onRoomSelected: (room) {
           final appointmentFeed = appointmentFeedFor?.call(room);
           Navigator.of(context).push<void>(
