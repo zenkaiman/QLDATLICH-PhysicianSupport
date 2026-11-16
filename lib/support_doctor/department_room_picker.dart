@@ -1252,6 +1252,43 @@ typedef ClinicAppointmentFeed = ({
   Future<void> Function(int statusId) setRoomStatus,
 });
 
+/// Mở thẳng `QueueScreen` cho một phòng đã xác định.
+///
+/// Dùng chung cho việc bấm thẻ phòng và bấm một dòng lịch trực hợp lệ.
+/// Guard (nếu có) phải được gọi trước khi gọi hàm này. `NavigatorState`
+/// được truyền sẵn để không phải dùng lại `BuildContext` sau một `await`.
+///
+/// [initialQueueDay] là ngày nạp lịch hẹn lúc mở màn hình; `null` = hôm nay.
+Future<void> pushClinicQueueScreen(
+  NavigatorState navigator, {
+  required ClinicRoomData room,
+  required String hospitalName,
+  required ClinicAppointmentFeed? Function(ClinicRoomData room)?
+  appointmentFeedFor,
+  DateTime? initialQueueDay,
+}) async {
+  final appointmentFeed = appointmentFeedFor?.call(room);
+  await navigator.push<void>(
+    MaterialPageRoute<void>(
+      builder: (_) => QueueScreen(
+        sessionId: room.sessionIdForToday(),
+        roomId: room.id,
+        staffId: room.staffId,
+        roomName: room.name,
+        departmentName: room.department,
+        hospitalName: hospitalName,
+        appointmentQueueStream: appointmentFeed?.updates,
+        appointmentQueueForDay: appointmentFeed?.updatesForDay,
+        onAppointmentOutcome: appointmentFeed?.reportOutcome,
+        onRenumberAppointment: appointmentFeed?.renumber,
+        roomStatusStream: appointmentFeed?.roomStatus,
+        onRoomStatusChanged: appointmentFeed?.setRoomStatus,
+        initialQueueDay: initialQueueDay,
+      ),
+    ),
+  );
+}
+
 /// Màn hình chọn khoa/phòng đã kết nối với QueueScreen trong queue_screen.dart.
 /// Dữ liệu phòng lấy trực tiếp từ danh sách [rooms] do bên gọi cung cấp.
 /// Để lấy từ Cloud Firestore theo thời gian thực, dùng
@@ -1357,23 +1394,12 @@ class ClinicRoomPickerScreen extends StatelessWidget {
         beforeRoomSelected: beforeRoomSelected,
         scheduleHeader: scheduleHeader,
         onRoomSelected: (room) {
-          final appointmentFeed = appointmentFeedFor?.call(room);
-          Navigator.of(context).push<void>(
-            MaterialPageRoute<void>(
-              builder: (_) => QueueScreen(
-                sessionId: room.sessionIdForToday(),
-                roomId: room.id,
-                staffId: room.staffId,
-                roomName: room.name,
-                departmentName: room.department,
-                hospitalName: hospitalName,
-                appointmentQueueStream: appointmentFeed?.updates,
-                appointmentQueueForDay: appointmentFeed?.updatesForDay,
-                onAppointmentOutcome: appointmentFeed?.reportOutcome,
-                onRenumberAppointment: appointmentFeed?.renumber,
-                roomStatusStream: appointmentFeed?.roomStatus,
-                onRoomStatusChanged: appointmentFeed?.setRoomStatus,
-              ),
+          unawaited(
+            pushClinicQueueScreen(
+              Navigator.of(context),
+              room: room,
+              hospitalName: hospitalName,
+              appointmentFeedFor: appointmentFeedFor,
             ),
           );
         },

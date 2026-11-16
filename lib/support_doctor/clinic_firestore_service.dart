@@ -641,6 +641,134 @@ class _FirestoreClinicRoomPickerScreenState
         ),
   );
 
+  /// Đổi `yyyy-MM-dd` của dòng lịch thành [DateTime] chỉ gồm phần ngày.
+  DateTime? _scheduleDay(DutyScheduleEntry schedule) {
+    final parts = schedule.dateSortKey.split('-');
+    if (parts.length != 3) return null;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
+  }
+
+  void _showScheduleMessage(
+    ScaffoldMessengerState messenger,
+    String message,
+  ) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: const Color(0xFF191C26),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+          margin: const EdgeInsets.fromLTRB(18, 0, 18, 16),
+        ),
+      );
+  }
+
+  /// Tìm phòng theo MÃ trước (`benh_vien_id` + `khoa_id` + `phong_id`),
+  /// sau đó fallback theo `ten_khoa` / `ten_phong` nếu thiếu mã hoặc không
+  /// khớp. Các mã chỉ dùng nội bộ, không render lên giao diện.
+  ClinicRoomData? _findScheduleRoom(
+    List<ClinicRoomData> rooms,
+    DutyScheduleEntry schedule,
+  ) {
+    final hospitalId = schedule.hospitalId.trim();
+    final departmentId = schedule.departmentId.trim();
+    final roomId = schedule.roomId.trim();
+    final hasCodes =
+        hospitalId.isNotEmpty || departmentId.isNotEmpty || roomId.isNotEmpty;
+
+    if (hasCodes) {
+      for (final room in rooms) {
+        final hospitalOk = hospitalId.isEmpty ||
+            dutyIdentifierMatches(room.hospitalId, <String>{hospitalId});
+        final departmentOk = departmentId.isEmpty ||
+            dutyIdentifierMatches(room.departmentId, <String>{departmentId});
+        final roomOk = roomId.isEmpty ||
+            dutyIdentifierMatches(room.id, <String>{roomId});
+        if (hospitalOk && departmentOk && roomOk) return room;
+      }
+    }
+
+    final departmentName = schedule.departmentName.trim();
+    final roomName = schedule.roomName.trim();
+    if (departmentName.isEmpty && roomName.isEmpty) return null;
+    for (final room in rooms) {
+      final departmentOk = departmentName.isEmpty ||
+          dutyIdentifierMatches(room.department, <String>{departmentName});
+      final roomNameOk = roomName.isEmpty ||
+          dutyIdentifierMatches(room.name, <String>{roomName});
+      if (departmentOk && roomNameOk) return room;
+    }
+    return null;
+  }
+
+  /// Bấm một dòng lịch cụ thể: chỉ dòng có `trang_thai_id = 16` mới được
+  /// tìm phòng, qua guard rồi mở thẳng `QueueScreen`.
+  ///
+  /// Ngày của dòng lịch được dùng làm ngày nạp hàng chờ và cũng là ngày đối
+  /// chiếu phân công, nên bấm lịch của ngày nào thì lịch hẹn trong
+  /// `QueueScreen` đổi theo ngày đó (phục vụ test dữ liệu nhiều ngày).
+  Future<void> _openScheduleRoom(
+    BuildContext context, {
+    required List<ClinicRoomData> rooms,
+    required String hospitalName,
+    required DutyScheduleEntry schedule,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+
+    if (schedule.statusId != kDutyActiveStatusId) {
+      _showScheduleMessage(
+        messenger,
+        schedule.statusId == kDutyPendingStatusId
+            ? 'Lịch làm vẫn ở trạng thái chờ.'
+            : 'Lịch chưa được phân công.',
+      );
+      return;
+    }
+
+    final scheduleDay = _scheduleDay(schedule);
+    if (scheduleDay == null) {
+      _showScheduleMessage(messenger, 'Không đọc được ngày trực.');
+      return;
+    }
+
+    final room = _findScheduleRoom(rooms, schedule);
+    if (room == null) {
+      _showScheduleMessage(messenger, 'Không tìm thấy phòng.');
+      return;
+    }
+
+    final allowed = await _dutyGuard.checkAndNotify(
+      context,
+      DutyRoomContext(
+        hospitalId: room.hospitalId.trim().isNotEmpty
+            ? room.hospitalId
+            : widget.hospitalId,
+        departmentId: room.departmentId,
+        roomId: room.id,
+        departmentName: room.department,
+        roomName: room.name,
+        staffId: room.staffId,
+      ),
+      day: scheduleDay,
+    );
+    if (!allowed || !navigator.mounted) return;
+    await pushClinicQueueScreen(
+      navigator,
+      room: room,
+      hospitalName: hospitalName,
+      appointmentFeedFor: _appointmentFeedForRoom,
+      initialQueueDay: scheduleDay,
+    );
+  }
 
   Widget _roomsPicker(String hospitalName) =>
       StreamBuilder<List<ClinicRoomData>>(
@@ -656,14 +784,21 @@ class _FirestoreClinicRoomPickerScreenState
               !snapshot.hasData) {
             return const _FirestoreLoading();
           }
+          final rooms = snapshot.data!;
           return ClinicRoomPickerScreen(
-            rooms: snapshot.data!,
+            rooms: rooms,
             initialDepartment: widget.initialDepartment,
             hospitalName: hospitalName,
             scheduleHeader: DutyScheduleBanner(
               hospitalId: widget.hospitalId,
               firestore: _service.firestore,
               guard: _dutyGuard,
+              onScheduleSelected: (schedule) => _openScheduleRoom(
+                context,
+                rooms: rooms,
+                hospitalName: hospitalName,
+                schedule: schedule,
+              ),
             ),
             onLogout: widget.onLogout,
             appointmentFeedFor: _appointmentFeedForRoom,

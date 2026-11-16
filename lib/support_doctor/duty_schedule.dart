@@ -5,12 +5,19 @@ import 'package:flutter/material.dart';
 
 import 'duty_assignment_guard.dart';
 
+/// Callback khi bấm vào MỘT dòng lịch cụ thể. Luồng Firestore sẽ kiểm tra
+/// id trạng thái / ngày / phòng rồi quyết định đưa thẳng vào `QueueScreen`.
+typedef DutyScheduleTapHandler = Future<void> Function(
+  DutyScheduleEntry entry,
+);
+
 /// Một dòng lịch trực của nhân viên đang đăng nhập.
 ///
-/// Chỉ giữ nội dung được phép render: ngày, tên khoa, tên phòng và nhãn
-/// trạng thái. Mã nhân viên / id dùng để LỌC dữ liệu nhưng không đưa vào
-/// model hiển thị, đúng yêu cầu “giao diện chỉ hiện trạng thái, không hiện
-/// id” và “không cần đúng tên nhân viên”.
+/// Nội dung được phép render gồm ngày, tên khoa, tên phòng và nhãn trạng
+/// thái. Các mã/id dưới đây chỉ dùng NỘI BỘ để lọc nhân viên, kiểm tra
+/// trạng thái, so đúng ngày và tìm phòng; KHÔNG render lên giao diện, đúng
+/// yêu cầu “giao diện chỉ hiện trạng thái, không hiện id” và “không cần
+/// đúng tên nhân viên”.
 class DutyScheduleEntry {
   const DutyScheduleEntry({
     required this.dateLabel,
@@ -18,13 +25,25 @@ class DutyScheduleEntry {
     required this.departmentName,
     required this.roomName,
     required this.statusLabel,
+    required this.hospitalId,
+    required this.departmentId,
+    required this.roomId,
+    required this.statusId,
   });
 
   final String dateLabel;
+
+  /// `yyyy-MM-dd` lấy từ field `ngay`, dùng để sắp xếp, làm ngày nạp hàng
+  /// chờ và đối chiếu phân công khi bấm vào dòng lịch.
   final String dateSortKey;
   final String departmentName;
   final String roomName;
   final String statusLabel;
+
+  final String hospitalId;
+  final String departmentId;
+  final String roomId;
+  final String statusId;
 }
 
 /// Đọc realtime `PhanCong/{benhVien}/danh_sach` rồi lọc theo đúng mã nhân
@@ -69,6 +88,7 @@ class DutyScheduleService {
         if (!_belongsToCurrentStaff(data, staffAliases)) continue;
         final fields = _collectFields(data);
         final date = _dateFromFields(fields);
+        final statusId = _statusIdFromFields(fields);
         entries.add(
           DutyScheduleEntry(
             dateLabel: date.label,
@@ -83,7 +103,11 @@ class DutyScheduleService {
               _roomNameKeys,
               fallback: 'Chưa rõ phòng',
             ),
-            statusLabel: _statusLabel(fields),
+            statusLabel: _statusLabel(statusId, fields),
+            hospitalId: _labelFrom(fields, _hospitalIdKeys, fallback: ''),
+            departmentId: _labelFrom(fields, _departmentIdKeys, fallback: ''),
+            roomId: _labelFrom(fields, _roomIdKeys, fallback: ''),
+            statusId: statusId,
           ),
         );
       }
@@ -103,17 +127,21 @@ class DutyScheduleService {
 ///
 /// - Nghe realtime một lần duy nhất cho toàn bộ màn hình; không `Timer`,
 ///   không tạo listener mới mỗi lần rebuild, không ghi ngược Firestore.
-/// - Bấm thẻ / “Xem tất cả” để mở danh sách toàn bộ lịch; danh sách này
-///   cũng cập nhật theo cùng stream realtime.
+/// - Bấm “Xem tất cả” để mở danh sách toàn bộ lịch; danh sách này cũng
+///   cập nhật theo cùng stream realtime.
+/// - Bấm vào MỘT dòng lịch cụ thể gọi [onScheduleSelected] để luồng
+///   Firestore kiểm tra id trạng thái / ngày / phòng rồi đưa thẳng vào phòng.
 class DutyScheduleBanner extends StatefulWidget {
   const DutyScheduleBanner({
     super.key,
     required this.hospitalId,
+    required this.onScheduleSelected,
     this.firestore,
     this.guard,
   });
 
   final String hospitalId;
+  final DutyScheduleTapHandler onScheduleSelected;
   final FirebaseFirestore? firestore;
   final DutyAssignmentGuard? guard;
 
@@ -174,6 +202,15 @@ class _DutyScheduleBannerState extends State<DutyScheduleBanner> {
     if (current != null) unawaited(current.cancel());
     _view.dispose();
     super.dispose();
+  }
+
+  void _handleEntryTap(
+    DutyScheduleEntry entry, {
+    BuildContext? sheetContext,
+  }) {
+    // Đóng bottom sheet trước để thông báo / màn hình phòng không bị che.
+    if (sheetContext != null) Navigator.of(sheetContext).pop();
+    unawaited(widget.onScheduleSelected(entry));
   }
 
   void _showAllSchedules() {
@@ -242,6 +279,8 @@ class _DutyScheduleBannerState extends State<DutyScheduleBanner> {
                     view: view,
                     scrollController: scrollController,
                     onRetry: _startListening,
+                    onScheduleTap: (entry) =>
+                        _handleEntryTap(entry, sheetContext: sheetContext),
                   ),
                 ),
               ],
@@ -260,6 +299,7 @@ class _DutyScheduleBannerState extends State<DutyScheduleBanner> {
           view: view,
           onRetry: _startListening,
           onViewAll: _showAllSchedules,
+          onScheduleTap: (entry) => _handleEntryTap(entry),
         ),
       );
 }
@@ -281,11 +321,13 @@ class _DutyScheduleCard extends StatelessWidget {
     required this.view,
     required this.onRetry,
     required this.onViewAll,
+    required this.onScheduleTap,
   });
 
   final _DutyScheduleView view;
   final VoidCallback onRetry;
   final VoidCallback onViewAll;
+  final ValueChanged<DutyScheduleEntry> onScheduleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -354,7 +396,10 @@ class _DutyScheduleCard extends StatelessWidget {
               else ...[
                 for (var index = 0; index < preview.length; index++) ...[
                   if (index > 0) const SizedBox(height: 10),
-                  _SchedulePreviewRow(entry: preview[index]),
+                  _SchedulePreviewRow(
+                    entry: preview[index],
+                    onTap: () => onScheduleTap(preview[index]),
+                  ),
                 ],
                 if (remaining > 0) ...[
                   const SizedBox(height: 8),
@@ -422,51 +467,59 @@ class _ScheduleLiveBadge extends StatelessWidget {
 }
 
 class _SchedulePreviewRow extends StatelessWidget {
-  const _SchedulePreviewRow({required this.entry});
+  const _SchedulePreviewRow({required this.entry, required this.onTap});
 
   final DutyScheduleEntry entry;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Container(
-        margin: const EdgeInsets.only(top: 5),
-        width: 8,
-        height: 8,
-        decoration: const BoxDecoration(
-          color: _ScheduleUi.accent,
-          shape: BoxShape.circle,
-        ),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${entry.dateLabel} · ${entry.statusLabel}',
-              style: const TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: _ScheduleUi.text,
-              ),
+  Widget build(BuildContext context) => InkWell(
+    borderRadius: BorderRadius.circular(12),
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 5),
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: _ScheduleUi.accent,
+              shape: BoxShape.circle,
             ),
-            const SizedBox(height: 3),
-            Text(
-              '${entry.departmentName} · ${entry.roomName}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 12,
-                color: _ScheduleUi.secondary,
-                fontWeight: FontWeight.w500,
-              ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${entry.dateLabel} · ${entry.statusLabel}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: _ScheduleUi.text,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${entry.departmentName} · ${entry.roomName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _ScheduleUi.secondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    ],
+    ),
   );
 }
 
@@ -475,11 +528,13 @@ class _ScheduleList extends StatelessWidget {
     required this.view,
     required this.scrollController,
     required this.onRetry,
+    required this.onScheduleTap,
   });
 
   final _DutyScheduleView view;
   final ScrollController scrollController;
   final VoidCallback onRetry;
+  final ValueChanged<DutyScheduleEntry> onScheduleTap;
 
   @override
   Widget build(BuildContext context) {
@@ -517,59 +572,65 @@ class _ScheduleList extends StatelessWidget {
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (context, index) => _ScheduleDetailTile(
         entry: view.entries[index],
+        onTap: () => onScheduleTap(view.entries[index]),
       ),
     );
   }
 }
 
 class _ScheduleDetailTile extends StatelessWidget {
-  const _ScheduleDetailTile({required this.entry});
+  const _ScheduleDetailTile({required this.entry, required this.onTap});
 
   final DutyScheduleEntry entry;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: const Color(0xFFF9FAFE),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _ScheduleUi.border),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Icon(
-              Icons.event_available_rounded,
-              size: 17,
-              color: _ScheduleUi.accent,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                entry.dateLabel,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: _ScheduleUi.text,
+  Widget build(BuildContext context) => InkWell(
+    borderRadius: BorderRadius.circular(16),
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFE),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _ScheduleUi.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.event_available_rounded,
+                size: 17,
+                color: _ScheduleUi.accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  entry.dateLabel,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: _ScheduleUi.text,
+                  ),
                 ),
               ),
-            ),
-            _ScheduleStatusPill(label: entry.statusLabel),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _ScheduleLine(
-          icon: Icons.local_hospital_outlined,
-          label: entry.departmentName,
-        ),
-        const SizedBox(height: 6),
-        _ScheduleLine(
-          icon: Icons.meeting_room_outlined,
-          label: entry.roomName,
-        ),
-      ],
+              _ScheduleStatusPill(label: entry.statusLabel),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _ScheduleLine(
+            icon: Icons.local_hospital_outlined,
+            label: entry.departmentName,
+          ),
+          const SizedBox(height: 6),
+          _ScheduleLine(
+            icon: Icons.meeting_room_outlined,
+            label: entry.roomName,
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -737,6 +798,38 @@ const Set<String> _roomNameKeys = <String>{
   'tenphongkhambenh',
 };
 
+/// Mã dùng NỘI BỘ để tìm đúng `ClinicRoomData` khi bấm một dòng lịch.
+/// Không render lên giao diện.
+const Set<String> _hospitalIdKeys = <String>{
+  'benhvienid',
+  'mabenhvien',
+  'benhvien',
+  'hospitalid',
+};
+
+const Set<String> _departmentIdKeys = <String>{
+  'khoaid',
+  'makhoa',
+  'idkhoa',
+  'departmentid',
+  'department',
+  'chuyenkhoaid',
+  'makhoaphong',
+};
+
+const Set<String> _roomIdKeys = <String>{
+  'phongid',
+  'maphong',
+  'idphong',
+  'roomid',
+  'room',
+  'maphongkham',
+  'phongkhamid',
+  'phongkham',
+  'idphongkham',
+  'idphongkhambenh',
+};
+
 const Set<String> _statusTextKeys = <String>{
   'trangthai',
   'status',
@@ -835,8 +928,14 @@ String _labelFrom(
   return value.isEmpty ? fallback : value;
 }
 
-String _statusLabel(Map<String, List<Object?>> fields) {
-  final statusId = _firstString(fields, _statusIdKeys);
+String _statusIdFromFields(Map<String, List<Object?>> fields) {
+  final raw = _firstString(fields, _statusIdKeys);
+  if (raw.isEmpty) return '';
+  final parsed = num.tryParse(raw);
+  return parsed == null ? raw : parsed.toInt().toString();
+}
+
+String _statusLabel(String statusId, Map<String, List<Object?>> fields) {
   // Id trạng thái 15 được ưu tiên tuyệt đối: phần lịch trực phải hiện "Chờ".
   if (statusId == kDutyPendingStatusId) return 'Chờ';
   final text = _firstString(fields, _statusTextKeys);
