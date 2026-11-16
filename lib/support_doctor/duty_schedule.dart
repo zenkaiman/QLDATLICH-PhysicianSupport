@@ -752,6 +752,10 @@ const Set<String> _statusIdKeys = <String>{
   'assignmentstatusid',
 };
 
+/// Id trạng thái chờ trong lịch trực. Khi gặp id này, luôn render đúng
+/// nhãn "Chờ" dù document có kèm field `trang_thai` dạng chữ khác.
+const String kDutyPendingStatusId = '15';
+
 bool _belongsToCurrentStaff(
   Map<String, Object?> data,
   Set<String> staffAliases,
@@ -832,9 +836,11 @@ String _labelFrom(
 }
 
 String _statusLabel(Map<String, List<Object?>> fields) {
+  final statusId = _firstString(fields, _statusIdKeys);
+  // Id trạng thái 15 được ưu tiên tuyệt đối: phần lịch trực phải hiện "Chờ".
+  if (statusId == kDutyPendingStatusId) return 'Chờ';
   final text = _firstString(fields, _statusTextKeys);
   if (text.isNotEmpty) return _sentenceCase(text);
-  final statusId = _firstString(fields, _statusIdKeys);
   if (statusId == kDutyActiveStatusId) return 'Đã phân công';
   return 'Chưa rõ trạng thái';
 }
