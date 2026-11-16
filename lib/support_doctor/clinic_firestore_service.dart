@@ -809,8 +809,8 @@ String clinicRoomDepartmentId(Map<String, Object?> data) =>
 /// `trang_thai_id` / `trangThaiId` / `trang_thai` / `trangThai`, sau đó
 /// trả id đã đối chiếu theo thứ tự ưu tiên: **field số → mã chuỗi**.
 /// Chấp nhận số, chuỗi số (`"12"`) và 3 mã chuỗi chuẩn (`"dang_kham"`,
-/// `"tam_dung"`, `"dong"`); vẫn đọc các alias cũ như `"tam_dung_kham"`.
-/// Mã ngắn `"kham"` đã bị gỡ và không còn được nhận dạng.
+/// `"tam_dung"`, `"dong"`); vẫn đọc các alias cũ như `"tam_dung_kham"`
+/// và mã ngắn `"kham"`. Mã `"kham"` chỉ dùng để đọc, không được ghi.
 /// Trả về `null` khi không có field hợp lệ — lúc đó app dùng trạng thái
 /// phiên local như cũ.
 int? clinicRoomStatusId(Map<String, Object?> data) =>

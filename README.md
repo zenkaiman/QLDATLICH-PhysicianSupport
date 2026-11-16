@@ -141,14 +141,14 @@ Giá trị chuẩn của `trang_thai` chỉ là 3 mã `tam_dung` / `dang_kham` /
   (`trang_thai_id`, `trangThaiId`) và 2 field chuỗi (`trang_thai`,
   `trangThai`), cộng các tên legacy `statusId`, `id_trang_thai`,
   `ma_trang_thai`. Field số thắng field chuỗi; mã chuỗi chuẩn map
-  `tam_dung → 12`, `dang_kham → 13`, `dong → 14`. Các mã cũ còn lại
-  `tam_dung_kham`, `dong_phong_kham`, `dong_phong`, `da_dong` vẫn được
-  giữ làm **alias khi đọc** để document hiện có không mất trạng thái.
-  Mã ngắn `kham` đã bị gỡ: nếu document chỉ có `trang_thai: "kham"` và
-  không có field số hợp lệ, `resolvedId` là `null` → map sang trạng thái
-  mở và giữ fallback phiên `RoomSessionStore`. Field số `13` vẫn thắng
-  và đọc bình thường. Thiếu field hợp lệ hoặc mã lạ → `null` và giữ
-  nguyên trạng thái phiên `RoomSessionStore`.
+  `tam_dung → 12`, `dang_kham → 13`, `dong → 14`. Các mã cũ
+  `tam_dung_kham`, `kham`, `dong_phong_kham`, `dong_phong`, `da_dong`
+  vẫn được giữ làm **alias khi đọc** để document hiện có không mất trạng
+  thái. Mã ngắn `kham` chỉ là alias đọc của `13`, không phải mã ghi: nếu
+  document chỉ có `trang_thai: "kham"` và không có field số hợp lệ,
+  `resolvedId` vẫn là `13`. Field số vẫn thắng field chuỗi; thiếu field
+  hợp lệ hoặc mã lạ → `null` và giữ nguyên trạng thái phiên
+  `RoomSessionStore`.
 - `clinic_firestore_service.dart`: `watchRoomStatusId()` nghe realtime đúng
   document phòng; `updateRoomStatusId()` ghi **đúng 2 field snake_case**
   `trang_thai_id` (12/13/14) + `trang_thai` (mã chuỗi), kèm
@@ -179,8 +179,9 @@ field như ảnh: `trangThai: "dang_kham"`, `trangThaiId: 13`,
 `dang_kham` là **mã chuẩn** của `13`, không còn là alias cũ. Khi bấm nút
 chỉ **cập nhật 2 field snake_case** `trang_thai_id` và `trang_thai`, trong
 đó `trang_thai` được ghi đè thành `dang_kham` cho id `13`; 2 field
-camelCase được giữ nguyên để không phá dữ liệu cũ. Mã `kham` không còn
-được nhận dạng khi đọc chuỗi, nhưng field số `13` vẫn được ưu tiên.
+camelCase được giữ nguyên để không phá dữ liệu cũ. Mã `kham` vẫn được
+nhận dạng như alias đọc của `13`, nhưng không được ghi; field số `13`
+vẫn được ưu tiên.
 
 Nếu document chưa có cặp snake_case, gọi từ code dev (không tự chạy khi
 khởi động app):

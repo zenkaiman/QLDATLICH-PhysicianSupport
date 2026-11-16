@@ -52,8 +52,8 @@ const List<String> kRoomStatusFieldVariants = <String>[
 
 /// Mã chuỗi CHUẨN ghi vào `trang_thai`:
 /// `12 → tam_dung`, `13 → dang_kham`, `14 → dong`.
-/// `dang_kham` là mã chuẩn cho id 13, không còn là alias; mã ngắn `kham`
-/// không được đọc dưới dạng mã chuỗi nữa.
+/// `dang_kham` là mã chuẩn cho id 13; mã ngắn `kham` chỉ được giữ làm
+/// alias khi đọc, không phải giá trị ghi.
 const Map<int, String> kRoomStatusCodes = <int, String>{
   kRoomStatusPausedId: 'tam_dung',
   kRoomStatusOpenId: 'dang_kham',
@@ -63,14 +63,15 @@ const Map<int, String> kRoomStatusCodes = <int, String>{
 /// Ánh xạ ngược mã chuỗi → id.
 ///
 /// 3 mã chuẩn đứng đầu; các mã dài/ngắn cũ còn lại vẫn được giữ để ĐỌC dữ
-/// liệu Firestore hiện có. Mã `kham` đã bị gỡ hoàn toàn theo yêu cầu; khi
-/// GHI luôn dùng [kRoomStatusCodes].
+/// liệu Firestore hiện có, trong đó `kham` là alias đọc của id 13. Khi GHI
+/// luôn dùng [kRoomStatusCodes].
 const Map<String, int> kRoomStatusIdsByCode = <String, int>{
   'tam_dung': kRoomStatusPausedId,
   'dang_kham': kRoomStatusOpenId,
   'dong': kRoomStatusClosedId,
   // Alias dữ liệu cũ.
   'tam_dung_kham': kRoomStatusPausedId,
+  'kham': kRoomStatusOpenId,
   'dong_phong_kham': kRoomStatusClosedId,
   'dong_phong': kRoomStatusClosedId,
   'da_dong': kRoomStatusClosedId,
