@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'department_room_picker.dart';
 import 'duty_assignment_guard.dart';
+import 'duty_schedule.dart';
 import 'queue_screen.dart';
 import 'room_status.dart';
 
@@ -659,6 +660,11 @@ class _FirestoreClinicRoomPickerScreenState
             rooms: snapshot.data!,
             initialDepartment: widget.initialDepartment,
             hospitalName: hospitalName,
+            scheduleHeader: DutyScheduleBanner(
+              hospitalId: widget.hospitalId,
+              firestore: _service.firestore,
+              guard: _dutyGuard,
+            ),
             onLogout: widget.onLogout,
             appointmentFeedFor: _appointmentFeedForRoom,
             beforeRoomSelected: (context, room) => _dutyGuard.checkAndNotify(
