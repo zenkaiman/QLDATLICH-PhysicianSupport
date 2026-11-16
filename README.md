@@ -119,7 +119,7 @@ CSKH), vì chỉ các luồng này suy ra được `benhVienId` từ document `N
 Tab Bệnh viện / Bệnh nhân / Admin chưa có mã bệnh viện khi đăng nhập nên chưa
 áp dụng.
 
-## Trạng thái phòng khám: đọc 4 field, ghi 2 field (`tam_dung` / `kham` / `dong`)
+## Trạng thái phòng khám: đọc 4 field, ghi 2 field (`tam_dung` / `dang_kham` / `dong`)
 
 Bảng dùng chung nằm ở `lib/support_doctor/room_status.dart`. App lấy đúng
 document `PhongKham/{roomId}` theo mã phòng đã chọn (ví dụ
@@ -132,20 +132,23 @@ lệch nhau, **field số được ưu tiên**.
 | `trang_thai_id` | `trang_thai` (ghi) | Trạng thái | Nút / hành động |
 | --- | --- | --- | --- |
 | `12` | `tam_dung` | Tạm dừng khám | Nút `Tiếp tục khám`, banner kem-cam, chặn gọi số mới |
-| `13` | `kham` | Đang khám | Nút `Tạm dừng khám` / `Đóng phòng khám`, banner xanh |
+| `13` | `dang_kham` | Đang khám | Nút `Tạm dừng khám` / `Đóng phòng khám`, banner xanh |
 | `14` | `dong` | Đóng phòng khám | Nút `Mở phòng khám`, banner đỏ, khoá mọi thao tác gọi số |
 
-Giá trị chuẩn của `trang_thai` chỉ là 3 từ `tam_dung` / `kham` / `dong`.
+Giá trị chuẩn của `trang_thai` chỉ là 3 mã `tam_dung` / `dang_kham` / `dong`.
 
 - `readClinicRoomStatus()` đọc trọn 4 field: 2 field số
   (`trang_thai_id`, `trangThaiId`) và 2 field chuỗi (`trang_thai`,
   `trangThai`), cộng các tên legacy `statusId`, `id_trang_thai`,
   `ma_trang_thai`. Field số thắng field chuỗi; mã chuỗi chuẩn map
-  `tam_dung → 12`, `kham → 13`, `dong → 14`. Các mã cũ
-  `tam_dung_kham`, `dang_kham`, `dong_phong_kham`, `dong_phong`,
-  `da_dong` vẫn được giữ làm **alias khi đọc** để document hiện có không
-  mất trạng thái. Thiếu field hoặc mã lạ → coi như `13` và giữ nguyên
-  trạng thái phiên `RoomSessionStore`.
+  `tam_dung → 12`, `dang_kham → 13`, `dong → 14`. Các mã cũ còn lại
+  `tam_dung_kham`, `dong_phong_kham`, `dong_phong`, `da_dong` vẫn được
+  giữ làm **alias khi đọc** để document hiện có không mất trạng thái.
+  Mã ngắn `kham` đã bị gỡ: nếu document chỉ có `trang_thai: "kham"` và
+  không có field số hợp lệ, `resolvedId` là `null` → map sang trạng thái
+  mở và giữ fallback phiên `RoomSessionStore`. Field số `13` vẫn thắng
+  và đọc bình thường. Thiếu field hợp lệ hoặc mã lạ → `null` và giữ
+  nguyên trạng thái phiên `RoomSessionStore`.
 - `clinic_firestore_service.dart`: `watchRoomStatusId()` nghe realtime đúng
   document phòng; `updateRoomStatusId()` ghi **đúng 2 field snake_case**
   `trang_thai_id` (12/13/14) + `trang_thai` (mã chuỗi), kèm
@@ -158,7 +161,7 @@ Giá trị chuẩn của `trang_thai` chỉ là 3 từ `tam_dung` / `kham` / `do
   giữ nội bộ để đối chiếu 4 field và không để trạng thái phiên local ghi
   đè lên.
 - Trên `QueueScreen`, bấm **Tạm dừng khám** ghi `12` + `tam_dung`,
-  **Tiếp tục khám** / **Mở phòng khám** ghi `13` + `kham`,
+  **Tiếp tục khám** / **Mở phòng khám** ghi `13` + `dang_kham`,
   **Đóng phòng khám** ghi `14` + `dong` vào 2 field snake_case.
   Trạng thái từ thiết bị khác cũng cập nhật banner/nút ngay qua stream.
   Thay đổi từ Firestore **không chụp lại giờ máy**: mốc `HH:mm:ss` vẫn chỉ
@@ -173,10 +176,11 @@ Giá trị chuẩn của `trang_thai` chỉ là 3 từ `tam_dung` / `kham` / `do
 Trên Firebase Console, document `PhongKham/BV502_K001_HH001` đang có cả 4
 field như ảnh: `trangThai: "dang_kham"`, `trangThaiId: 13`,
 `trang_thai: "dang_kham"`, `trang_thai_id: 13`. App đọc cả 4 để đối chiếu;
-`dang_kham` vẫn hiểu là `13` nhờ alias cũ. Khi bấm nút chỉ **cập nhật 2
-field snake_case** `trang_thai_id` và `trang_thai`, trong đó `trang_thai`
-được ghi đè thành mã chuẩn mới (`kham` cho id `13`); 2 field camelCase
-được giữ nguyên để không phá dữ liệu cũ.
+`dang_kham` là **mã chuẩn** của `13`, không còn là alias cũ. Khi bấm nút
+chỉ **cập nhật 2 field snake_case** `trang_thai_id` và `trang_thai`, trong
+đó `trang_thai` được ghi đè thành `dang_kham` cho id `13`; 2 field
+camelCase được giữ nguyên để không phá dữ liệu cũ. Mã `kham` không còn
+được nhận dạng khi đọc chuỗi, nhưng field số `13` vẫn được ưu tiên.
 
 Nếu document chưa có cặp snake_case, gọi từ code dev (không tự chạy khi
 khởi động app):
@@ -184,7 +188,7 @@ khởi động app):
 ```dart
 await DatabaseSeeder.seedRoomStatusId(
   roomId: 'BV502_K001_HH001',
-  statusId: 13, // 12 tam_dung | 13 kham | 14 dong
+  statusId: 13, // 12 tam_dung | 13 dang_kham | 14 dong
 );
 ```
 

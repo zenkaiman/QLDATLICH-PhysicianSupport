@@ -8,6 +8,11 @@ import 'queue_screen.dart';
 import 'room_session_store.dart';
 import 'room_status.dart';
 
+/// Guard bất đồng bộ chạy ngay trước khi mở phòng: nhận `context` hiện tại
+/// và dữ liệu phòng, trả `false` để chặn `onRoomSelected`. Dùng cho kiểm tra
+/// phân công trực mà không đổi kiểu callback đồng bộ cũ của picker.
+typedef RoomEntryGuard<T> = Future<bool> Function(BuildContext context, T room);
+
 /// A reusable screen for choosing a department and then a clinic room.
 ///
 /// This widget is generic so it can use the `RoomInfo` model from an existing
@@ -30,6 +35,7 @@ class DepartmentRoomPicker<T> extends StatefulWidget {
     required this.waitingCountOf,
     required this.examinedCountOf,
     required this.onRoomSelected,
+    this.beforeRoomSelected,
     this.initialDepartment,
     this.hospitalName = 'Bệnh viện',
     this.title = 'Chọn phòng khám',
@@ -57,6 +63,10 @@ class DepartmentRoomPicker<T> extends StatefulWidget {
 
   /// Called when the user taps an available room.
   final ValueChanged<T> onRoomSelected;
+
+  /// Kiểm tra điều kiện vào phòng (ví dụ đúng khoa / phòng được phân công).
+  /// Khi `null`, giữ nguyên hành vi bấm là vào phòng ngay.
+  final RoomEntryGuard<T>? beforeRoomSelected;
 
   /// Khoa mặc định (giữ lại để tương thích với mã gọi cũ). Trang chọn nay
   /// luôn mở ở bước chọn khoa nên giá trị này không còn tự đưa người dùng
@@ -91,6 +101,7 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
       TextEditingController();
   String? _selectedDepartment;
   _RoomFilter _filter = _RoomFilter.all;
+  bool _checkingRoomEntry = false;
 
   List<String> get _departments {
     final values = widget.rooms
@@ -744,13 +755,24 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
         child: InkWell(
           // Phòng đã đóng VẪN vào được màn hình hàng chờ để bác sĩ bấm
           // "Mở phòng khám" ở nút dưới cùng; nếu chặn tap thì phòng bị kẹt.
-          onTap: () {
-            if (closed) {
-              _showMessage(
-                '${widget.roomNameOf(room)} đã đóng. Mở lại từ trong phòng.',
-              );
+          // Guard phân công chạy trước cả thông báo phòng đóng để sai khoa
+          // không lọt vào QueueScreen.
+          onTap: () async {
+            if (_checkingRoomEntry) return;
+            _checkingRoomEntry = true;
+            try {
+              final guard = widget.beforeRoomSelected;
+              if (guard != null && !await guard(context, room)) return;
+              if (!mounted) return;
+              if (closed) {
+                _showMessage(
+                  '${widget.roomNameOf(room)} đã đóng. Mở lại từ trong phòng.',
+                );
+              }
+              widget.onRoomSelected(room);
+            } finally {
+              _checkingRoomEntry = false;
             }
-            widget.onRoomSelected(room);
           },
           child: Padding(
             padding: EdgeInsets.all(compact ? 14 : 16),
@@ -1233,6 +1255,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
     this.hospitalName = 'Bệnh viện Bạch Mai',
     this.onLogout,
     this.appointmentFeedFor,
+    this.beforeRoomSelected,
   });
 
   final List<ClinicRoomData> rooms;
@@ -1263,6 +1286,10 @@ class ClinicRoomPickerScreen extends StatelessWidget {
   /// bệnh nhân nào ngoài trạng thái phiên đã có trong cùng lần chạy app.
   final ClinicAppointmentFeed? Function(ClinicRoomData room)?
   appointmentFeedFor;
+
+  /// Guard tuỳ chọn do luồng Firestore truyền vào để chặn phòng không đúng
+  /// phân công. Luồng demo/offline không truyền thì giữ nguyên hành vi cũ.
+  final RoomEntryGuard<ClinicRoomData>? beforeRoomSelected;
 
   /// Danh sách phòng kèm trạng thái/số liệu thật lấy từ [RoomSessionStore]
   /// (phòng chưa mở lần nào thì giữ nguyên dữ liệu ban đầu).
@@ -1313,6 +1340,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
         currentNumberOf: (room) => room.currentNumber,
         waitingCountOf: (room) => room.waitingCount,
         examinedCountOf: (room) => room.examinedCount,
+        beforeRoomSelected: beforeRoomSelected,
         onRoomSelected: (room) {
           final appointmentFeed = appointmentFeedFor?.call(room);
           Navigator.of(context).push<void>(
