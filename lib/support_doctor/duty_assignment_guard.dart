@@ -4,16 +4,24 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../config/app_session.dart';
 import '../models/letan_c1/letan_profile_model_c1.dart';
+import '../services/letan_c1/letan_firebase_service_c1.dart';
 
 /// Collection phân công ca trực theo link Firebase Console:
 /// `PhanCong/{maBenhVien}/danh_sach/{yyyy-MM-dd}_{maCa}`.
+///
+/// Mã nhân viên được xác định từ chính document
+/// `NhanVien/{maBenhVien}/danh_sach/{maNhanVien}` (document ID + các field
+/// id/mã/uid/email), rồi đem so với mã lưu bên `PhanCong`.
 ///
 /// Code chỉ nằm trong `lib/support_doctor`: đọc MỘT LẦN khi bấm chọn
 /// phòng, không tạo listener realtime, không ghi ngược lên Firestore, không
 /// sửa luồng đăng nhập, route, tài liệu hay bản preview tĩnh.
 const String kDutyAssignmentCollection = 'PhanCong';
 const String kDutyAssignmentSubcollection = 'danh_sach';
+const String kDutyStaffCollection = 'NhanVien';
+const String kDutyStaffSubcollection = 'danh_sach';
 
 /// Câu báo lỗi đúng theo yêu cầu khi bấm sai khoa / phòng được phân công.
 const String kDutyWrongRoomMessage = 'bạn không được phân vào trực khoa này';
@@ -60,6 +68,9 @@ class DutyAssignmentDecision {
 ///
 /// - Nguồn: Firestore thật, lọc document có id bắt đầu bằng ngày hiện tại
 ///   `yyyy-MM-dd_` (mọi ca trong ngày), đúng lựa chọn của người dùng.
+/// - Mã nhân viên lấy từ đúng document `NhanVien/{bv}/danh_sach/{...}`:
+///   document ID, `id`, `ma_nhan_vien`, `ma_tai_khoan`, `uid`, `email`…
+///   Fail-closed: không đọc được doc nhân viên hoặc không khớp mã → chặn.
 /// - Đọc linh hoạt cả field phẳng, list và map con; hỗ trợ nhiều alias tên
 ///   field vì không truy cập được Firebase Console để xem schema thật.
 /// - So CẢ mã khoa và mã phòng; nếu document chỉ có một loại mã thì chỉ
@@ -83,9 +94,12 @@ class DutyAssignmentGuard {
     final prefix = _datePrefix(_now());
     Set<String> staffAliases;
     try {
-      staffAliases = _currentStaffAliases();
+      staffAliases = await _resolveCurrentStaffAliases(hospitalId);
     } catch (_) {
-      staffAliases = <String>{};
+      return const DutyAssignmentDecision.blocked(kDutyReadErrorMessage);
+    }
+    if (staffAliases.isEmpty) {
+      return const DutyAssignmentDecision.blocked(kDutyWrongRoomMessage);
     }
     final assignments = <_AssignmentDraft>[];
 
@@ -217,6 +231,116 @@ class DutyAssignmentGuard {
     return false;
   }
 
+  /// Đọc đúng document `NhanVien/{bv}/danh_sach/{...}` của nhân viên đang
+  /// đăng nhập để lấy toàn bộ alias mã/id, rồi mới đem so với `PhanCong`.
+  /// Không tìm thấy doc → trả set rỗng để `evaluate` chặn (fail-closed).
+  Future<Set<String>> _resolveCurrentStaffAliases(String hospitalId) async {
+    final profile = DuLieuProfileMauC1.thongTinHienTai;
+    User? authUser;
+    try {
+      authUser = FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      authUser = null;
+    }
+
+    final baseValues = <String?>[
+      profile.maNhanVien,
+      profile.email,
+      authUser?.uid,
+      authUser?.email,
+    ];
+    final hospitalCandidates = <String>{
+      hospitalId,
+      profile.benhVienId,
+      AppSession.benhVienId,
+      _hospitalIdFromStaffCode(profile.maNhanVien),
+    }..removeWhere((value) => value.trim().isEmpty);
+
+    final lookupEmail = profile.email.trim().isNotEmpty
+        ? profile.email.trim()
+        : authUser?.email;
+    final lookupStaffCode = profile.maNhanVien.trim().isNotEmpty
+        ? profile.maNhanVien.trim()
+        : null;
+
+    // Dùng chung bộ tìm kiếm nhân viên của luồng đăng nhập để ra đúng
+    // document ID / docPath, sau đó vẫn thử đường dẫn thẳng theo bệnh viện
+    // nếu bộ tìm kiếm trả null (rules/index khác nhau giữa các project).
+    DocumentSnapshot<Map<String, dynamic>>? staffDoc =
+        await FirebaseServiceC1.timKiemDocNhanVien(
+      email: lookupEmail,
+      maNhanVien: lookupStaffCode,
+      uid: authUser?.uid,
+    );
+    if (staffDoc != null &&
+        staffDoc.exists &&
+        !_docBelongsToHospital(staffDoc.reference.path, hospitalCandidates)) {
+      staffDoc = null;
+    }
+    staffDoc ??= await _findStaffDocDirectly(hospitalCandidates, baseValues);
+
+    if (staffDoc == null || !staffDoc.exists) return <String>{};
+    final data = staffDoc.data() ?? <String, dynamic>{};
+    final raw = <String?>[
+      staffDoc.id,
+      staffDoc.reference.path,
+      ...baseValues,
+    ];
+    for (final entry in data.entries) {
+      if (_staffIdentityKeys.contains(_canonicalKey(entry.key))) {
+        raw.addAll(_strings(entry.value));
+      }
+    }
+
+    final aliases = <String>{};
+    for (final value in raw) {
+      if (value == null) continue;
+      final normalized = _normalizeId(value);
+      if (normalized.isNotEmpty) aliases.add(normalized);
+    }
+    return aliases;
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>?> _findStaffDocDirectly(
+    Set<String> hospitalCandidates,
+    List<String?> baseValues,
+  ) async {
+    final candidateIds = <String>{};
+    for (final value in baseValues) {
+      if (value == null) continue;
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) continue;
+      candidateIds.add(trimmed);
+      candidateIds.add(trimmed.toUpperCase());
+    }
+    for (final hospital in hospitalCandidates) {
+      for (final id in candidateIds) {
+        final doc = await _firestore
+            .collection(kDutyStaffCollection)
+            .doc(hospital)
+            .collection(kDutyStaffSubcollection)
+            .doc(id)
+            .get();
+        if (doc.exists) return doc;
+      }
+    }
+    return null;
+  }
+
+  bool _docBelongsToHospital(String path, Set<String> hospitals) {
+    for (final hospital in hospitals) {
+      if (hospital.isEmpty) continue;
+      if (path.contains(hospital)) return true;
+    }
+    return false;
+  }
+
+  String _hospitalIdFromStaffCode(String value) {
+    final match = RegExp(r'^(BV\d+)_', caseSensitive: false)
+        .firstMatch(value.trim());
+    return match?.group(1) ?? '';
+  }
+
   String _datePrefix(DateTime now) =>
       '${now.year.toString().padLeft(4, '0')}-'
       '${now.month.toString().padLeft(2, '0')}-'
@@ -328,24 +452,6 @@ void _addByKey(_AssignmentDraft draft, String key, Object? value) {
     draft.departmentNames.addAll(values);
   }
   if (_roomNameKeys.contains(canonical)) draft.roomNames.addAll(values);
-}
-
-Set<String> _currentStaffAliases() {
-  final profile = DuLieuProfileMauC1.thongTinHienTai;
-  final authUser = FirebaseAuth.instance.currentUser;
-  final raw = <String?>[
-    profile.maNhanVien,
-    profile.email,
-    authUser?.uid,
-    authUser?.email,
-  ];
-  final aliases = <String>{};
-  for (final value in raw) {
-    if (value == null) continue;
-    final normalized = _normalizeId(value);
-    if (normalized.isNotEmpty) aliases.add(normalized);
-  }
-  return aliases;
 }
 
 bool _matchesSelection(
@@ -482,6 +588,41 @@ const Set<String> _staffIdKeys = <String>{
   'danhsachbacsi',
   'dsnhanvien',
   'dsbacsi',
+  'id',
+  'docid',
+  'documentid',
+  'docpath',
+  'mabacsi',
+  'mabs',
+  'nhanvien',
+  'bacsi',
+  'taikhoan',
+  'username',
+};
+
+/// Field mã/id trong chính document `NhanVien/...` được gom làm alias để so
+/// với mã nhân viên bên `PhanCong`. Document ID và `reference.path` cũng
+/// được thêm riêng trong [_resolveCurrentStaffAliases].
+const Set<String> _staffIdentityKeys = <String>{
+  'id',
+  'docid',
+  'documentid',
+  'docpath',
+  'manhanvien',
+  'mataikhoan',
+  'manv',
+  'nhanvienid',
+  'nhanvien',
+  'idnhanvien',
+  'staffid',
+  'uid',
+  'email',
+  'emailnhanvien',
+  'taikhoan',
+  'username',
+  'mabacsi',
+  'mabs',
+  'bacsiid',
 };
 
 const Set<String> _departmentIdKeys = <String>{
