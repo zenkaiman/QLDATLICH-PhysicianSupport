@@ -11,6 +11,25 @@ typedef DutyScheduleTapHandler = Future<void> Function(
   DutyScheduleEntry entry,
 );
 
+/// Callback mỗi khi danh sách lịch trực realtime thay đổi.
+typedef DutyScheduleListHandler = void Function(
+  List<DutyScheduleEntry> entries,
+);
+
+/// Ngày trực của một dòng lịch: `yyyy-MM-dd` → [DateTime] chỉ gồm phần ngày.
+///
+/// `null` khi field `ngay` không đọc được. Màn hình chọn khoa dùng hàm này
+/// để gom các ngày trực hợp lệ rồi truyền sang `QueueScreen`.
+DateTime? dutyDayOf(DutyScheduleEntry entry) {
+  final parts = entry.dateSortKey.split('-');
+  if (parts.length != 3) return null;
+  final year = int.tryParse(parts[0]);
+  final month = int.tryParse(parts[1]);
+  final day = int.tryParse(parts[2]);
+  if (year == null || month == null || day == null) return null;
+  return DateTime(year, month, day);
+}
+
 /// Một dòng lịch trực của nhân viên đang đăng nhập.
 ///
 /// Nội dung được phép render gồm ngày, tên khoa, tên phòng và nhãn trạng
@@ -131,17 +150,21 @@ class DutyScheduleService {
 ///   cập nhật theo cùng stream realtime.
 /// - Bấm vào MỘT dòng lịch cụ thể gọi [onScheduleSelected] để luồng
 ///   Firestore kiểm tra id trạng thái / ngày / phòng rồi đưa thẳng vào phòng.
+/// - [onEntriesChanged] (tuỳ chọn) báo danh sách lịch realtime ra ngoài, để
+///   `QueueScreen` biết ngày nào có lịch trực và chặn đổi sang ngày khác.
 class DutyScheduleBanner extends StatefulWidget {
   const DutyScheduleBanner({
     super.key,
     required this.hospitalId,
     required this.onScheduleSelected,
+    this.onEntriesChanged,
     this.firestore,
     this.guard,
   });
 
   final String hospitalId;
   final DutyScheduleTapHandler onScheduleSelected;
+  final DutyScheduleListHandler? onEntriesChanged;
   final FirebaseFirestore? firestore;
   final DutyAssignmentGuard? guard;
 
@@ -186,10 +209,12 @@ class _DutyScheduleBannerState extends State<DutyScheduleBanner> {
       (entries) {
         if (!mounted || generation != _generation) return;
         _view.value = _DutyScheduleView(entries: entries);
+        widget.onEntriesChanged?.call(entries);
       },
       onError: (Object error, StackTrace stackTrace) {
         if (!mounted || generation != _generation) return;
         _view.value = const _DutyScheduleView(error: true);
+        widget.onEntriesChanged?.call(const <DutyScheduleEntry>[]);
       },
     );
   }
