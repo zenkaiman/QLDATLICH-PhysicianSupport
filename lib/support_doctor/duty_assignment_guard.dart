@@ -8,12 +8,18 @@ import '../config/app_session.dart';
 import '../models/letan_c1/letan_profile_model_c1.dart';
 import '../services/letan_c1/letan_firebase_service_c1.dart';
 
-/// Collection phân công ca trực theo link Firebase Console:
-/// `PhanCong/{maBenhVien}/danh_sach/{yyyy-MM-dd}_{maCa}`.
+/// Collection phân công ca trực: `PhanCong/{maBenhVien}/danh_sach/...`.
+///
+/// Schema thực tế trong ảnh Console: `benh_vien_id`, `khoa_id`, `phong_id`,
+/// `ma_nhan_vien`, `nhan_vien_id`, `ngay`, `trang_thai_id`, `ten_khoa`,
+/// `ten_phong`. Quyết định vào phòng CHỈ dùng đúng ngày trong field `ngay`
+/// và `trang_thai_id = 16`; không đọc field `id`, không đọc document ID,
+/// không so `ten_nhan_vien`.
 ///
 /// Mã nhân viên được xác định từ chính document
 /// `NhanVien/{maBenhVien}/danh_sach/{maNhanVien}` (document ID + các field
-/// id/mã/uid/email), rồi đem so với mã lưu bên `PhanCong`.
+/// id/mã/uid/email), rồi đem so với `ma_nhan_vien` / `nhan_vien_id` bên
+/// `PhanCong`.
 ///
 /// Code chỉ nằm trong `lib/support_doctor`: đọc MỘT LẦN khi bấm chọn
 /// phòng, không tạo listener realtime, không ghi ngược lên Firestore, không
@@ -22,6 +28,9 @@ const String kDutyAssignmentCollection = 'PhanCong';
 const String kDutyAssignmentSubcollection = 'danh_sach';
 const String kDutyStaffCollection = 'NhanVien';
 const String kDutyStaffSubcollection = 'danh_sach';
+
+/// Chỉ ca có id trạng thái này mới được phép vào phòng.
+const String kDutyActiveStatusId = '16';
 
 /// Câu báo lỗi đúng theo yêu cầu khi bấm sai khoa / phòng được phân công.
 const String kDutyWrongRoomMessage = 'bạn không được phân vào trực khoa này';
@@ -66,16 +75,19 @@ class DutyAssignmentDecision {
 
 /// Kiểm tra phân công trực trước khi cho bác sĩ vào `QueueScreen`.
 ///
-/// - Nguồn: Firestore thật, lọc document có id bắt đầu bằng ngày hiện tại
-///   `yyyy-MM-dd_` (mọi ca trong ngày), đúng lựa chọn của người dùng.
+/// - Nguồn: Firestore thật. Chỉ nhận document có field `ngay` đúng ngày
+///   hiện tại `yyyy-MM-dd`; KHÔNG lọc theo `id` hay document ID.
+/// - Chỉ nhận `trang_thai_id = 16` (hoặc alias id trạng thái); mọi id khác
+///   hoặc thiếu id trạng thái → bỏ document đó.
 /// - Mã nhân viên lấy từ đúng document `NhanVien/{bv}/danh_sach/{...}`:
 ///   document ID, `id`, `ma_nhan_vien`, `ma_tai_khoan`, `uid`, `email`…
 ///   Fail-closed: không đọc được doc nhân viên hoặc không khớp mã → chặn.
-/// - Đọc linh hoạt cả field phẳng, list và map con; hỗ trợ nhiều alias tên
-///   field vì không truy cập được Firebase Console để xem schema thật.
+/// - So bằng MÃ: `ma_nhan_vien` / `nhan_vien_id` / `khoa_id` / `phong_id` /
+///   `benh_vien_id`. Bỏ qua `ten_nhan_vien`; vẫn giữ `ten_khoa` /
+///   `ten_phong` làm fallback khi thiếu mã.
 /// - So CẢ mã khoa và mã phòng; nếu document chỉ có một loại mã thì chỉ
 ///   dùng loại đó.
-/// - Sai / không tìm thấy phân công → chặn và hiện đúng câu
+/// - Sai / không tìm thấy phân công hợp lệ → chặn và hiện đúng câu
 ///   [kDutyWrongRoomMessage].
 class DutyAssignmentGuard {
   DutyAssignmentGuard({FirebaseFirestore? firestore, DateTime Function()? now})
@@ -91,7 +103,7 @@ class DutyAssignmentGuard {
       return const DutyAssignmentDecision.blocked(kDutyReadErrorMessage);
     }
 
-    final prefix = _datePrefix(_now());
+    final today = _dateOnly(_now());
     Set<String> staffAliases;
     try {
       staffAliases = await _resolveCurrentStaffAliases(hospitalId);
@@ -104,21 +116,19 @@ class DutyAssignmentGuard {
     final assignments = <_AssignmentDraft>[];
 
     try {
-      // Đọc một lần toàn bộ subcollection rồi lọc theo prefix ngày ở client
-      // để không phụ thuộc index / kiểu query documentId của project.
+      // Đọc một lần toàn bộ subcollection rồi lọc ở client theo đúng field
+      // `ngay` và `trang_thai_id = 16`. Không dùng `id` / document ID.
       final snapshot = await _firestore
           .collection(kDutyAssignmentCollection)
           .doc(hospitalId)
           .collection(kDutyAssignmentSubcollection)
           .get();
       for (final doc in snapshot.docs) {
-        if (!doc.id.startsWith(prefix)) continue;
+        final data = Map<String, Object?>.from(doc.data());
+        if (!_documentMatchesDutyDate(data, today)) continue;
+        if (!_documentHasActiveStatusId(data)) continue;
         assignments.addAll(
-          _parseDocument(
-            hospitalId,
-            Map<String, Object?>.from(doc.data()),
-            staffAliases,
-          ),
+          _parseDocument(hospitalId, data, staffAliases),
         );
       }
     } catch (_) {
@@ -341,10 +351,6 @@ class DutyAssignmentGuard {
     return match?.group(1) ?? '';
   }
 
-  String _datePrefix(DateTime now) =>
-      '${now.year.toString().padLeft(4, '0')}-'
-      '${now.month.toString().padLeft(2, '0')}-'
-      '${now.day.toString().padLeft(2, '0')}_';
 }
 
 class _AssignmentDraft {
@@ -441,6 +447,7 @@ List<_AssignmentDraft> _parseDocument(
 
 void _addByKey(_AssignmentDraft draft, String key, Object? value) {
   final canonical = _canonicalKey(key);
+  if (_ignoredAssignmentKeys.contains(canonical)) return;
   final values = _strings(value);
   if (_staffIdKeys.contains(canonical)) draft.staffIds.addAll(values);
   if (_departmentIdKeys.contains(canonical)) {
@@ -521,6 +528,94 @@ String _normalizeId(String value) {
 String _canonicalKey(String key) =>
     key.toLowerCase().replaceAll(RegExp(r'[_\-\s./]'), '');
 
+String _dateOnly(DateTime date) =>
+    '${date.year.toString().padLeft(4, '0')}-'
+    '${date.month.toString().padLeft(2, '0')}-'
+    '${date.day.toString().padLeft(2, '0')}';
+
+/// Chỉ so đúng field ngày trong document (`ngay: "yyyy-MM-dd"`), KHÔNG đọc
+/// field `id` và KHÔNG đọc document ID.
+bool _documentMatchesDutyDate(Map<String, Object?> data, String today) =>
+    _findMatchingDate(data, today, 0);
+
+bool _findMatchingDate(Object? value, String today, int depth) {
+  if (depth > 6) return false;
+  if (value is Map) {
+    for (final entry in value.entries) {
+      final key = entry.key.toString();
+      if (_dutyDateKeys.contains(_canonicalKey(key)) &&
+          _dateValueMatches(entry.value, today)) {
+        return true;
+      }
+      if (_findMatchingDate(entry.value, today, depth + 1)) return true;
+    }
+  } else if (value is List) {
+    for (final item in value) {
+      if (_findMatchingDate(item, today, depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
+bool _dateValueMatches(Object? value, String today) {
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed == today ||
+        trimmed.startsWith('$today ') ||
+        trimmed.startsWith('${today}T');
+  }
+  if (value is Timestamp) return _dateOnly(value.toDate()) == today;
+  if (value is DateTime) return _dateOnly(value) == today;
+  if (value is List) {
+    for (final item in value) {
+      if (_dateValueMatches(item, today)) return true;
+    }
+  } else if (value is Map) {
+    for (final item in value.values) {
+      if (_dateValueMatches(item, today)) return true;
+    }
+  }
+  return false;
+}
+
+/// Chỉ `trang_thai_id = 16` mới hợp lệ; id khác hoặc thiếu field → loại.
+bool _documentHasActiveStatusId(Map<String, Object?> data) =>
+    _findActiveStatusId(data, 0);
+
+bool _findActiveStatusId(Object? value, int depth) {
+  if (depth > 6) return false;
+  if (value is Map) {
+    for (final entry in value.entries) {
+      final key = entry.key.toString();
+      if (_activeStatusIdKeys.contains(_canonicalKey(key)) &&
+          _statusValueIsActive(entry.value)) {
+        return true;
+      }
+      if (_findActiveStatusId(entry.value, depth + 1)) return true;
+    }
+  } else if (value is List) {
+    for (final item in value) {
+      if (_findActiveStatusId(item, depth + 1)) return true;
+    }
+  }
+  return false;
+}
+
+bool _statusValueIsActive(Object? value) {
+  if (value is num) return value == 16;
+  if (value is String) return value.trim() == kDutyActiveStatusId;
+  if (value is List) {
+    for (final item in value) {
+      if (_statusValueIsActive(item)) return true;
+    }
+  } else if (value is Map) {
+    for (final item in value.values) {
+      if (_statusValueIsActive(item)) return true;
+    }
+  }
+  return false;
+}
+
 Set<String> _strings(Object? value) {
   final result = <String>{};
   void visit(Object? current, int depth) {
@@ -588,10 +683,6 @@ const Set<String> _staffIdKeys = <String>{
   'danhsachbacsi',
   'dsnhanvien',
   'dsbacsi',
-  'id',
-  'docid',
-  'documentid',
-  'docpath',
   'mabacsi',
   'mabs',
   'nhanvien',
@@ -673,4 +764,36 @@ const Set<String> _roomNameKeys = <String>{
   'roomname',
   'tenphongkham',
   'tenphongkhambenh',
+};
+
+/// Field ngày được phép dùng để chọn ca. Cố tình KHÔNG gồm `id`,
+/// `ngay_cap_nhat` hay document ID.
+const Set<String> _dutyDateKeys = <String>{
+  'ngay',
+  'date',
+  'ngaytruc',
+  'ngayphancong',
+  'ngaylamviec',
+  'ngaykham',
+};
+
+/// Field id trạng thái. `trang_thai` dạng chữ ("đã phân công") không nằm
+/// trong set này vì yêu cầu chỉ đọc id trạng thái = 16.
+const Set<String> _activeStatusIdKeys = <String>{
+  'trangthaiid',
+  'statusid',
+  'idtrangthai',
+  'matrangthai',
+  'assignmentstatusid',
+};
+
+/// Các field trong ảnh KHÔNG được dùng để xác định nhân viên / ngày.
+/// `id` là mã bản ghi phân công, `ten_nhan_vien` chỉ là tên hiển thị.
+const Set<String> _ignoredAssignmentKeys = <String>{
+  'id',
+  'tennhanvien',
+  'vaitro',
+  'trangthai',
+  'ngaycapnhat',
+  'prefixkhoa',
 };
