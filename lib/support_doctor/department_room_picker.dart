@@ -1259,6 +1259,7 @@ typedef ClinicAppointmentFeed = ({
 /// được truyền sẵn để không phải dùng lại `BuildContext` sau một `await`.
 ///
 /// [initialQueueDay] là ngày nạp lịch hẹn lúc mở màn hình; `null` = hôm nay.
+/// [dutyDays] là các ngày có lịch trực hợp lệ; `null` = không ràng buộc.
 Future<void> pushClinicQueueScreen(
   NavigatorState navigator, {
   required ClinicRoomData room,
@@ -1266,6 +1267,7 @@ Future<void> pushClinicQueueScreen(
   required ClinicAppointmentFeed? Function(ClinicRoomData room)?
   appointmentFeedFor,
   DateTime? initialQueueDay,
+  Set<DateTime>? dutyDays,
 }) async {
   final appointmentFeed = appointmentFeedFor?.call(room);
   await navigator.push<void>(
@@ -1284,6 +1286,7 @@ Future<void> pushClinicQueueScreen(
         roomStatusStream: appointmentFeed?.roomStatus,
         onRoomStatusChanged: appointmentFeed?.setRoomStatus,
         initialQueueDay: initialQueueDay,
+        dutyDays: dutyDays,
       ),
     ),
   );
@@ -1303,6 +1306,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
     this.appointmentFeedFor,
     this.beforeRoomSelected,
     this.scheduleHeader,
+    this.dutyDays,
   });
 
   final List<ClinicRoomData> rooms;
@@ -1341,6 +1345,11 @@ class ClinicRoomPickerScreen extends StatelessWidget {
   /// Thẻ lịch trực realtime của nhân viên đang đăng nhập. Luồng Firestore
   /// truyền vào; luồng demo/offline để `null` nên không thay đổi giao diện.
   final Widget? scheduleHeader;
+
+  /// Các ngày có lịch trực hợp lệ do luồng Firestore cập nhật realtime.
+  /// `QueueScreen` dùng để chặn đổi sang ngày không có lịch trực. `null` =
+  /// không ràng buộc (demo/offline).
+  final Set<DateTime>? dutyDays;
 
   /// Danh sách phòng kèm trạng thái/số liệu thật lấy từ [RoomSessionStore]
   /// (phòng chưa mở lần nào thì giữ nguyên dữ liệu ban đầu).
@@ -1400,6 +1409,7 @@ class ClinicRoomPickerScreen extends StatelessWidget {
               room: room,
               hospitalName: hospitalName,
               appointmentFeedFor: appointmentFeedFor,
+              dutyDays: dutyDays,
             ),
           );
         },

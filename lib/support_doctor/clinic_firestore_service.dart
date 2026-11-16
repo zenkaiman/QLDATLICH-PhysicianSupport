@@ -589,6 +589,11 @@ class _FirestoreClinicRoomPickerScreenState
   late Stream<List<ClinicRoomData>> _roomsStream;
   Stream<String>? _hospitalNameStream;
 
+  /// Ngày có lịch trực hợp lệ của nhân viên đang đăng nhập, cập nhật từ
+  /// chính luồng realtime của thẻ lịch trực. `QueueScreen` dùng danh sách
+  /// này để chặn đổi sang ngày không có lịch trực.
+  Set<DateTime>? _dutyDays;
+
   @override
   void initState() {
     super.initState();
@@ -642,14 +647,29 @@ class _FirestoreClinicRoomPickerScreenState
   );
 
   /// Đổi `yyyy-MM-dd` của dòng lịch thành [DateTime] chỉ gồm phần ngày.
-  DateTime? _scheduleDay(DutyScheduleEntry schedule) {
-    final parts = schedule.dateSortKey.split('-');
-    if (parts.length != 3) return null;
-    final year = int.tryParse(parts[0]);
-    final month = int.tryParse(parts[1]);
-    final day = int.tryParse(parts[2]);
-    if (year == null || month == null || day == null) return null;
-    return DateTime(year, month, day);
+  DateTime? _scheduleDay(DutyScheduleEntry schedule) => dutyDayOf(schedule);
+
+  /// Gom các ngày có lịch trực hợp lệ (`trang_thai_id = 16`) từ luồng lịch
+  /// trực realtime, để `QueueScreen` so sánh khi người dùng đổi ngày.
+  void _updateDutyDays(List<DutyScheduleEntry> entries) {
+    final days = <DateTime>{};
+    for (final entry in entries) {
+      if (entry.statusId != kDutyActiveStatusId) continue;
+      final day = dutyDayOf(entry);
+      if (day != null) days.add(day);
+    }
+    final previous = _dutyDays;
+    final unchanged = previous != null &&
+        previous.length == days.length &&
+        previous.containsAll(days);
+    if (unchanged) return;
+    if (!mounted) {
+      _dutyDays = days;
+      return;
+    }
+    // Callback chạy ngoài build (từ listener realtime) nên setState an toàn;
+    // nhờ vậy màn hình chọn khoa luôn truyền danh sách ngày trực mới nhất.
+    setState(() => _dutyDays = days);
   }
 
   void _showScheduleMessage(
@@ -767,6 +787,7 @@ class _FirestoreClinicRoomPickerScreenState
       hospitalName: hospitalName,
       appointmentFeedFor: _appointmentFeedForRoom,
       initialQueueDay: scheduleDay,
+      dutyDays: _dutyDays,
     );
   }
 
@@ -789,10 +810,12 @@ class _FirestoreClinicRoomPickerScreenState
             rooms: rooms,
             initialDepartment: widget.initialDepartment,
             hospitalName: hospitalName,
+            dutyDays: _dutyDays,
             scheduleHeader: DutyScheduleBanner(
               hospitalId: widget.hospitalId,
               firestore: _service.firestore,
               guard: _dutyGuard,
+              onEntriesChanged: _updateDutyDays,
               onScheduleSelected: (schedule) => _openScheduleRoom(
                 context,
                 rooms: rooms,
