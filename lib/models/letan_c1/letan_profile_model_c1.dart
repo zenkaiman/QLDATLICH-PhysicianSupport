@@ -55,10 +55,12 @@ class DuLieuProfileMauC1 {
   ];
 
   static ThongTinLeTanC1 thongTinHienTai = const ThongTinLeTanC1(
-    hoTen: 'Đinh Hoàng Cước',
-    chucVu: 'NHÂN VIÊN LỄ TÂN TIẾP ĐÓN',
-    maNhanVien: 'LT_TM_01',
-    khoa: 'Khoa Tim Mạch',
-    email: 'cuoc@gmail.com',
+    hoTen: 'cuoc xương',
+    chucVu: 'CHĂM SÓC KHÁCH HÀNG',
+    maNhanVien: 'BV502_CSKH_CXK_01',
+    khoa: 'Khoa Cơ xương khớp',
+    email: 'cuoc2004@gmail.com',
+    benhVienId: 'BV502',
+    tenBenhVien: 'Bệnh viện Đa khoa Quốc tế',
   );
 }

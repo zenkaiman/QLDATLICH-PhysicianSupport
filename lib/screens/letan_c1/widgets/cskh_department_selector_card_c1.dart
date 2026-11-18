@@ -2,19 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../../models/letan_c1/letan_design_system_c1.dart';
 
-/// Card hiển thị Khoa đang chọn / Khoa làm việc hiện tại kèm nút Đổi Khoa
+/// Card hiển thị Khoa làm việc cố định theo phân công của Bệnh viện
 class CskhDepartmentSelectorCardC1 extends StatelessWidget {
   final String tenKhoaHienTai;
-  final VoidCallback onChangeDepartment;
   final String label;
   final String badgeText;
 
   const CskhDepartmentSelectorCardC1({
     super.key,
     required this.tenKhoaHienTai,
-    required this.onChangeDepartment,
-    this.label = 'KHOA HIỆN TẠI',
-    this.badgeText = 'Bệnh viện',
+    this.label = 'KHOA PHÂN CÔNG (CỐ ĐỊNH)',
+    this.badgeText = 'Bệnh viện chỉ định',
   });
 
   @override
@@ -104,30 +102,33 @@ class CskhDepartmentSelectorCardC1 extends StatelessWidget {
               ],
             ),
           ),
-          InkWell(
-            onTap: onChangeDepartment,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0284C7),
-                borderRadius: BorderRadius.circular(10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark ? AppDesignSystemC1.darkBorder : const Color(0xFFCBD5E1),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.swap_horiz_rounded, size: 16, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text(
-                    'Đổi Khoa',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_outline_rounded,
+                  size: 13,
+                  color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Cố định',
+                  style: TextStyle(
+                    color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w700,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],

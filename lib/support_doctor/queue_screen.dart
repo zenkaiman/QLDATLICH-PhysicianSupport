@@ -1933,8 +1933,7 @@ class _QueueScreenState extends State<QueueScreen> {
     // khoá ánh xạ đã đổi sang số mới).
     final canBaoTrangThai = <String>[
       for (final number in immediateNumbersToReport)
-        if (_appointmentIdByNumber[number] case final appointmentId?)
-          appointmentId,
+        ?_appointmentIdByNumber[number],
     ];
     // Chạy lại danh sách số sau khi chèn: số vừa chèn nhận số mốc + 1,
     // các số phía sau tăng thêm 1 và được ghi lên Firebase.

@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+<key>NSLocationWhenInUseUsageDescription</key>
+    <string>Ứng dụng cần truy cập vị trí của bạn để tìm và hiển thị các bệnh viện gần bạn nhất.</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>Ứng dụng cần truy cập vị trí của bạn để tìm và hiển thị các bệnh viện gần bạn nhất, ngay cả khi ứng dụng chạy nền.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>

@@ -11,7 +11,6 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
   final String tenKhoaHienTai;
   final String? khoaIdHienTai;
   final DateTime ngayChon;
-  final VoidCallback onSelectKhoa;
   final VoidCallback onSelectDate;
   final void Function(Map<String, dynamic> phong, String tenKhoa) onSelectPhong;
 
@@ -20,7 +19,6 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
     required this.tenKhoaHienTai,
     required this.khoaIdHienTai,
     required this.ngayChon,
-    required this.onSelectKhoa,
     required this.onSelectDate,
     required this.onSelectPhong,
   });
@@ -38,9 +36,6 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
           // 1. Selector chọn Khoa làm việc ở trên cùng
           CskhDepartmentSelectorCardC1(
             tenKhoaHienTai: tenKhoaHienTai,
-            onChangeDepartment: onSelectKhoa,
-            label: 'KHOA ĐANG CHỌN',
-            badgeText: 'Đang làm việc',
           ),
           const SizedBox(height: 14),
 
@@ -151,6 +146,45 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
                   khoaDoc = k;
                   break;
                 }
+              }
+
+              // Nếu Bệnh viện đã xóa Khoa này: Chặn hoàn toàn không hiển thị phòng khám ảo
+              if (dsKhoa.isNotEmpty && khoaDoc == null) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF450A0A).withValues(alpha: 0.4) : const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFEF4444).withValues(alpha: isDark ? 0.6 : 0.4),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.lock_rounded, size: 36, color: Color(0xFFEF4444)),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Khoa "$tenKhoaHienTai" đã bị xóa khỏi hệ thống',
+                        style: const TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Bạn không có quyền quản lý hay duyệt đơn của các phòng thuộc khoa khác.',
+                        style: TextStyle(
+                          color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
               }
 
               final khoaId = khoaIdHienTai ?? khoaDoc?['id']?.toString() ?? 'KHOA_MAC_DINH';
@@ -264,12 +298,16 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(
-                                          tenPhong,
-                                          style: TextStyle(
-                                            color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF0F172A),
-                                            fontSize: 15.5,
-                                            fontWeight: FontWeight.w700,
+                                        Flexible(
+                                          child: Text(
+                                            tenPhong,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF0F172A),
+                                              fontSize: 15.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                           ),
                                         ),
                                         if (soPhong.isNotEmpty) ...[

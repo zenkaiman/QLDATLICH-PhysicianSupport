@@ -91,12 +91,18 @@ class CskhBannerTienDoC1 extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            '✓ = Duyệt • ✕ = Từ chối',
-            style: TextStyle(
-              color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '✓ = Duyệt • ✕ = Từ chối',
+                maxLines: 1,
+                style: TextStyle(
+                  color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ),
         ],

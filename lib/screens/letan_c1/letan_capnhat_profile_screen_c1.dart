@@ -20,20 +20,9 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
   final _formKey = GlobalKey<FormState>();
 
   late TextEditingController _hoTenController;
-  late TextEditingController _maNhanVienController;
   late TextEditingController _emailMoiController;
   late TextEditingController _matKhauXacNhanController;
-  late String _khoaDuocChon;
 
-  // 3 Role nhân viên cố định theo cơ sở dữ liệu
-  static const List<Map<String, dynamic>> danhSach3Roles = [
-    {'role': 'le_tan', 'vai_tro_id': 5, 'ten': 'Lễ tân tiếp đón'},
-    {'role': 'cham_soc_khach_hang', 'vai_tro_id': 6, 'ten': 'Chăm sóc khách hàng'},
-    {'role': 'ho_tro_bac_si', 'vai_tro_id': 4, 'ten': 'Hỗ trợ bác sĩ'},
-  ];
-
-  late String _roleDuocChon;
-  late String _tenChucVuDuocChon;
   bool _anMatKhauXacNhan = true;
   bool _dangXuLy = false;
 
@@ -41,186 +30,16 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
   void initState() {
     super.initState();
     _hoTenController = TextEditingController(text: widget.thongTinHienTai.hoTen);
-    _maNhanVienController = TextEditingController(text: widget.thongTinHienTai.maNhanVien);
     _emailMoiController = TextEditingController(text: widget.thongTinHienTai.email);
     _matKhauXacNhanController = TextEditingController();
-    _khoaDuocChon = widget.thongTinHienTai.khoa;
-
-    // Tìm role tương ứng hoặc mặc định là le_tan
-    final roleHienTai = danhSach3Roles.firstWhere(
-      (r) => widget.thongTinHienTai.chucVu.toLowerCase().contains(r['ten'].toString().toLowerCase()),
-      orElse: () => danhSach3Roles[0],
-    );
-    _roleDuocChon = roleHienTai['role'];
-    _tenChucVuDuocChon = roleHienTai['ten'];
-
-    // Tự động tải khoa thật từ Firebase Firestore /Khoa/BO85AxXqDMSB68hnYjzhYfPIxHC2/danh_sach
-    FirebaseServiceC1.layDanhSachTenKhoa().then((danhSachFirebase) {
-      if (mounted && danhSachFirebase.isNotEmpty) {
-        setState(() {
-          // Nếu khoa hiện tại vẫn là mock 'Khoa Tim Mạch' hoặc chưa khớp Firebase thì lấy ngay khoa thật đầu tiên trên Firebase (ví dụ: 'KHOA TIM')
-          final bool coTrongFirebase = danhSachFirebase.any(
-            (k) => k.trim().toLowerCase() == _khoaDuocChon.trim().toLowerCase(),
-          );
-          if (!coTrongFirebase) {
-            _khoaDuocChon = danhSachFirebase.first;
-          }
-        });
-      }
-    });
   }
 
   @override
   void dispose() {
     _hoTenController.dispose();
-    _maNhanVienController.dispose();
     _emailMoiController.dispose();
     _matKhauXacNhanController.dispose();
     super.dispose();
-  }
-
-  void _moModalChonKhoa() {
-    final isDark = AppDesignSystemC1.laCheDoToi;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? AppDesignSystemC1.darkSurface : Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: isDark ? AppDesignSystemC1.darkBorder : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    const Icon(Icons.local_hospital_rounded, color: Color(0xFFFF9500), size: 22),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Chọn Khoa Tiếp Nhận',
-                      style: TextStyle(
-                        color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Chọn khoa chuyên môn bạn đang trực ca tiếp nhận',
-                  style: TextStyle(
-                    color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF8E8E93),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.5,
-                  ),
-                  child: StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: FirebaseServiceC1.streamDanhSachKhoa(),
-                    builder: (context, snapshot) {
-                      List<String> danhSachKhoa;
-                      if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                        danhSachKhoa = snapshot.data!
-                            .map((e) => (e['tenKhoa'] ?? '').toString())
-                            .where((t) => t.isNotEmpty)
-                            .toList();
-                      } else {
-                        danhSachKhoa = DuLieuProfileMauC1.danhSachKhoaCoSan;
-                      }
-
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: danhSachKhoa.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final khoa = danhSachKhoa[index];
-                          final bool isSelected = khoa.trim().toLowerCase() == _khoaDuocChon.trim().toLowerCase();
-
-                          return InkWell(
-                            onTap: () {
-                              setState(() {
-                                _khoaDuocChon = khoa;
-                              });
-                              Navigator.pop(ctx);
-                            },
-                            borderRadius: BorderRadius.circular(14),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFFFFF5E6) : const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: isSelected ? const Color(0xFFFF9500) : const Color(0xFFE2E8F0),
-                                  width: isSelected ? 1.5 : 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: isSelected ? const Color(0xFFFF9500) : Colors.white,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Icon(
-                                      Icons.medical_services_outlined,
-                                      size: 18,
-                                      color: isSelected ? Colors.white : const Color(0xFF64748B),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Text(
-                                      khoa,
-                                      style: TextStyle(
-                                        color: isSelected ? const Color(0xFFFF9500) : const Color(0xFF1C1C1E),
-                                        fontSize: 14.5,
-                                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                  if (isSelected)
-                                    const Icon(Icons.check_circle_rounded, color: Color(0xFFFF9500), size: 22)
-                                  else
-                                    const Icon(Icons.radio_button_unchecked, color: Color(0xFFCBD5E1), size: 22),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _luuThayDoi() async {
@@ -241,7 +60,7 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
     }
 
     setState(() => _dangXuLy = true);
-    final maNv = _maNhanVienController.text.trim();
+    final maNv = widget.thongTinHienTai.maNhanVien.trim();
     final hoTenMoi = _hoTenController.text.trim();
 
     try {
@@ -254,25 +73,24 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
         );
       }
 
-      // 2. Cập nhật thông tin Họ tên, Chức vụ (1 trong 3 role), Khoa trên Firestore
-      final roleObj = danhSach3Roles.firstWhere((r) => r['role'] == _roleDuocChon);
+      // 2. Cập nhật thông tin Họ tên trên Firestore (Cố định chức vụ và khoa theo Bệnh viện phân công)
+      final bool isCskh = widget.thongTinHienTai.chucVu.toLowerCase().contains('cskh') ||
+          widget.thongTinHienTai.chucVu.toLowerCase().contains('chăm sóc');
       await FirebaseServiceC1.capNhatThongTinNhanVien(
         maNhanVien: maNv,
         hoTen: hoTenMoi,
-        chucVu: _tenChucVuDuocChon,
-        role: _roleDuocChon,
-        vaiTroId: roleObj['vai_tro_id'] as int,
-        khoa: _khoaDuocChon,
+        chucVu: widget.thongTinHienTai.chucVu,
+        role: isCskh ? 'cham_soc_khach_hang' : 'le_tan',
+        vaiTroId: isCskh ? 6 : 5,
+        khoa: widget.thongTinHienTai.khoa,
         benhVienId: widget.thongTinHienTai.benhVienId,
       );
+
       // Tự động dọn dẹp Document cấp 1 nếu có
       await FirebaseServiceC1.donDepDocumentNhanVienCap1(maNv);
 
       final thongTinMoi = widget.thongTinHienTai.copyWith(
         hoTen: hoTenMoi,
-        chucVu: _tenChucVuDuocChon,
-        maNhanVien: maNv,
-        khoa: _khoaDuocChon,
         email: emailMoi,
       );
 
@@ -319,7 +137,7 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
             color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
             size: 20,
           ),
-          onPressed: () => Navigator.pop(context), // Hủy bỏ
+          onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           'Chỉnh Sửa Thông Tin',
@@ -339,8 +157,7 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-
-                // Form chỉnh sửa thông tin
+                // Khối thông tin cố định do Bệnh viện phân công
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
@@ -351,18 +168,62 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // 1. Mã nhân viên cố định (Read-only)
+                      // 1. Mã nhân viên cố định
                       _buildRowThongTinCoDinh(
                         icon: Icons.badge_outlined,
                         label: 'Mã nhân viên (Cố định bởi Bệnh viện)',
                         val: widget.thongTinHienTai.maNhanVien,
                         isDark: isDark,
                       ),
+                      const SizedBox(height: 14),
+
+                      // 2. Chức vụ / Vai trò cố định
+                      _buildRowThongTinCoDinh(
+                        icon: Icons.workspace_premium_outlined,
+                        label: 'Chức vụ / Vai trò (Cố định bởi Bệnh viện)',
+                        val: widget.thongTinHienTai.chucVu,
+                        subLabel: 'Vai trò phân quyền cố định, không thể tự thay đổi để xem hay duyệt phân hệ khác',
+                        isDark: isDark,
+                      ),
+                      const SizedBox(height: 14),
+
+                      // 3. Chuyên khoa cố định
+                      _buildRowThongTinCoDinh(
+                        icon: Icons.local_hospital_outlined,
+                        label: 'Thuộc chuyên khoa (Cố định bởi Bệnh viện)',
+                        val: widget.thongTinHienTai.khoa,
+                        subLabel: 'Bạn chỉ có quyền xem và duyệt đơn của khoa này (hoặc do Bệnh viện phân công lại)',
+                        isDark: isDark,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                // Khối thông tin được phép chỉnh sửa
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: isDark ? AppDesignSystemC1.darkSurface : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: isDark ? AppDesignSystemC1.darkBorder : const Color(0xFFE5E5EA)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Thông tin cá nhân được phép sửa',
+                        style: TextStyle(
+                          color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(height: 16),
 
-                      // 2. Họ và tên
+                      // Họ và tên
                       _buildTextField(
-                        label: 'Họ và tên nhân viên',
+                        label: 'Họ và tên nhân viên (*)',
                         controller: _hoTenController,
                         icon: Icons.person_outline,
                         validator: (val) => val == null || val.trim().isEmpty ? 'Vui lòng nhập họ và tên' : null,
@@ -370,62 +231,7 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
                       ),
                       const SizedBox(height: 16),
 
-                      // 3. Chọn Chức vụ trong 3 role nhân viên (Dropdown Selector)
-                      Text(
-                        'Chức vụ / Vai trò nhân viên (*)',
-                        style: TextStyle(
-                          color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFFF9500).withValues(alpha: 0.35)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            value: _roleDuocChon,
-                            dropdownColor: isDark ? AppDesignSystemC1.darkSurface : Colors.white,
-                            items: danhSach3Roles.map((r) {
-                              return DropdownMenuItem<String>(
-                                value: r['role'] as String,
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.workspace_premium_outlined, color: Color(0xFFFF9500), size: 20),
-                                    const SizedBox(width: 10),
-                                    Text(
-                                      r['ten'] as String,
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white : const Color(0xFF1C1C1E),
-                                        fontSize: 14.5,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                final selected = danhSach3Roles.firstWhere((r) => r['role'] == val);
-                                setState(() {
-                                  _roleDuocChon = val;
-                                  _tenChucVuDuocChon = selected['ten'] as String;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // 4. Cho phép Đổi Gmail
+                      // Gmail đăng nhập
                       _buildTextField(
                         label: 'Địa chỉ Gmail đăng nhập (*)',
                         controller: _emailMoiController,
@@ -466,100 +272,6 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-
-                      // 5. Selector chọn Khoa có sẵn của bệnh viện dạng BottomSheet hiện đại
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Thuộc khoa tiếp nhận',
-                            style: TextStyle(
-                              color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          InkWell(
-                            onTap: _moModalChonKhoa,
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              decoration: BoxDecoration(
-                                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: const Color(0xFFFF9500).withValues(alpha: 0.35), width: 1.2),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.02),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF451A03) : const Color(0xFFFFF5E6),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: const Icon(Icons.local_hospital_rounded, color: Color(0xFFFF9500), size: 20),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Khoa đang công tác',
-                                          style: TextStyle(
-                                            color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF8E8E93),
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 1),
-                                        Text(
-                                          _khoaDuocChon,
-                                          style: TextStyle(
-                                            color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
-                                            fontSize: 14.5,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: isDark ? const Color(0xFF0C2444) : const Color(0xFFE8F4FD),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Row(
-                                      children: [
-                                        Text(
-                                          'Thay đổi',
-                                          style: TextStyle(
-                                            color: Color(0xFF007AFF),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        SizedBox(width: 2),
-                                        Icon(Icons.keyboard_arrow_right, color: Color(0xFF007AFF), size: 16),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
                 ),
@@ -588,7 +300,7 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
                 ),
                 const SizedBox(height: 12),
 
-                // Nút Hủy bỏ (về lại trang Profile, không đổi gì)
+                // Nút Hủy bỏ
                 OutlinedButton(
                   onPressed: () => Navigator.pop(context),
                   style: OutlinedButton.styleFrom(
@@ -614,36 +326,98 @@ class _LetanCapnhatProfileScreenC1State extends State<LetanCapnhatProfileScreenC
     required IconData icon,
     required String label,
     required String val,
+    String? subLabel,
     required bool isDark,
   }) {
-    return Row(
-      children: [
-        Icon(icon, color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF8E8E93), size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF8E8E93),
-                  fontSize: 11.5,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                val,
-                style: TextStyle(
-                  color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark ? AppDesignSystemC1.darkBorder : const Color(0xFFE2E8F0),
         ),
-      ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: const Color(0xFFFF9500), size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.lock_outline_rounded, size: 10, color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B)),
+                          const SizedBox(width: 2),
+                          Text(
+                            'Khóa',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  val,
+                  style: TextStyle(
+                    color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (subLabel != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subLabel,
+                    style: TextStyle(
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

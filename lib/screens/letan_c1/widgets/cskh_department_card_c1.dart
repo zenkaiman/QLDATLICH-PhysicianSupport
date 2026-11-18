@@ -101,6 +101,8 @@ class CskhDepartmentCardC1 extends StatelessWidget {
                     children: [
                       Text(
                         khoa.tenKhoa,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF0F172A),
                           fontSize: 14.5,
@@ -110,6 +112,8 @@ class CskhDepartmentCardC1 extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         khoa.moTaPhong,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
                           fontSize: 12,

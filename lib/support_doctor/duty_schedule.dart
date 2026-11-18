@@ -72,10 +72,9 @@ class DutyScheduleEntry {
 /// không giới hạn ngày hôm nay và không chỉ lọc `trang_thai_id = 16`.
 class DutyScheduleService {
   const DutyScheduleService({
-    required FirebaseFirestore firestore,
+    required this._firestore,
     required DutyAssignmentGuard guard,
-  }) : _firestore = firestore,
-       _guard = guard;
+  }) : _guard = guard;
 
   final FirebaseFirestore _firestore;
   final DutyAssignmentGuard _guard;

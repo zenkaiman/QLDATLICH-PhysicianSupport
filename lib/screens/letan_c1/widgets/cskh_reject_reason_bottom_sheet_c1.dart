@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../mock/mock_c1/dulieu_mau_cskh_c1.dart';
+import '../../../models/letan_c1/cskh_constants_c1.dart';
 import '../../../models/letan_c1/letan_design_system_c1.dart';
 import '../../../services/letan_c1/letan_firebase_service_c1.dart';
 
@@ -97,25 +97,26 @@ class CskhRejectReasonBottomSheetC1 {
                               ),
                             ],
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(10),
+                          if (don['so_thu_tu'] != null && don['so_thu_tu'].toString().isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                children: [
+                                  const Text(
+                                    'STT',
+                                    style: TextStyle(color: Colors.white70, fontSize: 9.5, fontWeight: FontWeight.w600),
+                                  ),
+                                  Text(
+                                    don['so_thu_tu'].toString(),
+                                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                                  ),
+                                ],
+                              ),
                             ),
-                            child: Column(
-                              children: [
-                                const Text(
-                                  'STT',
-                                  style: TextStyle(color: Colors.white70, fontSize: 9.5, fontWeight: FontWeight.w600),
-                                ),
-                                Text(
-                                  (don['stt'] ?? '1').toString(),
-                                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
-                                ),
-                              ],
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -265,28 +266,41 @@ class CskhRejectReasonBottomSheetC1 {
                                     ? lyDoKhacController.text.trim()
                                     : cacLyDo[lyDoDangChon];
 
-                                final scaffoldMessenger = ScaffoldMessenger.of(context);
                                 final appointmentId = don['id'];
                                 final docPath = don['docPath'];
                                 Navigator.pop(ctx);
-                                if (appointmentId != null) {
-                                  await FirebaseServiceC1.capNhatTrangThaiLichHen(
-                                    appointmentId: appointmentId,
-                                    docPath: docPath,
-                                    trangThaiMoi: 'tu_choi',
-                                    lyDoTuChoi: lyDoChon,
-                                  );
-                                }
 
-                                onRejected?.call();
-
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('✕ Đã từ chối đơn của ${don['hoTen']}: $lyDoChon'),
-                                    backgroundColor: const Color(0xFFEF4444),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
+                                // Optimistic UI: Phản hồi tức thì
+                                AppDesignSystemC1.hapticLight();
+                                AppDesignSystemC1.showCustomSnackBar(
+                                  context,
+                                  message: '✕ Đã từ chối đơn của ${don['hoTen']}: $lyDoChon',
+                                  isSuccess: false,
+                                  icon: Icons.cancel_rounded,
                                 );
+
+                                try {
+                                  if (appointmentId != null) {
+                                    await FirebaseServiceC1.capNhatTrangThaiLichHen(
+                                      appointmentId: appointmentId,
+                                      docPath: docPath,
+                                      trangThaiMoi: 'tu_choi',
+                                      lyDoTuChoi: lyDoChon,
+                                    );
+                                  }
+                                  AppDesignSystemC1.hapticSuccess();
+                                  onRejected?.call();
+                                } catch (_) {
+                                  AppDesignSystemC1.hapticError();
+                                  if (context.mounted) {
+                                    AppDesignSystemC1.showCustomSnackBar(
+                                      context,
+                                      message: '✕ Lỗi kết nối khi từ chối đơn khám!',
+                                      isSuccess: false,
+                                      icon: Icons.error_outline_rounded,
+                                    );
+                                  }
+                                }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFEF4444),

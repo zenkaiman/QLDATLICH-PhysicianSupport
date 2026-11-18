@@ -25,6 +25,7 @@ class CskhStatsRowC1 extends StatelessWidget {
         tenKhoa: tenKhoa,
         ngayChon: ngayChon,
         benhVienId: bvid,
+        laCskh: true,
       ),
       builder: (context, snapshot) {
         final thongKe = snapshot.data ?? {
@@ -36,33 +37,32 @@ class CskhStatsRowC1 extends StatelessWidget {
 
         final dangCho = thongKe['dangCho'] ?? 0;
         final daDuyet = thongKe['daTiepNhan'] ?? 0;
-        final tongSo = thongKe['tongSo'] ?? 0;
 
         return Row(
           children: [
             Expanded(
               child: _buildItem(
                 soLuong: '$dangCho',
-                nhanDe: 'Đang chờ',
+                nhanDe: 'Cần duyệt',
                 mauSo: const Color(0xFFD97706),
                 isDark: isDark,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: _buildItem(
-                soLuong: '$daDuyet',
-                nhanDe: 'Đã duyệt',
-                mauSo: const Color(0xFF10B981),
+                soLuong: '$dangCho',
+                nhanDe: 'Được phép duyệt',
+                mauSo: const Color(0xFF0284C7),
                 isDark: isDark,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: _buildItem(
-                soLuong: '$tongSo',
-                nhanDe: 'Tổng đơn',
-                mauSo: const Color(0xFF0284C7),
+                soLuong: '$daDuyet',
+                nhanDe: 'Đã cấp STT',
+                mauSo: const Color(0xFF10B981),
                 isDark: isDark,
               ),
             ),
@@ -87,26 +87,36 @@ class CskhStatsRowC1 extends StatelessWidget {
           color: isDark ? AppDesignSystemC1.darkBorder : const Color(0xFFE2E8F0),
         ),
       ),
-      child: Column(
-        children: [
-          Text(
-            soLuong,
-            style: TextStyle(
-              color: mauSo,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          children: [
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                soLuong,
+                style: TextStyle(
+                  color: mauSo,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            nhanDe,
-            style: TextStyle(
-              color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
-              fontSize: 11.5,
-              fontWeight: FontWeight.w500,
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                nhanDe,
+                maxLines: 1,
+                style: TextStyle(
+                  color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
