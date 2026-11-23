@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../config/app_routes.dart';
-import '../../models/family_profile_model.dart';
-import '../../providers/family_profile_provider.dart';
+import '../config/app_routes.dart';
+import '../models/family_profile_model.dart';
+import '../providers/family_profile_provider.dart';
 
 const Color _kPrimary = Color(0xFF2563EB);
 const Color _kText = Color(0xFF0F172A);

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../models/appointment_item.dart';
+import '../models/appointment_item.dart';
 
 /// Bảng màu dùng chung cho các màn hình đặt lịch / lịch khám.
 class ApptColors {

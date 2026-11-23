@@ -670,10 +670,15 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      await _authService.signOut();
       _securityWatcherSub?.cancel();
       _securityWatcherSub = null;
-      await _authService.signOut();
-      await StaffSession.clear();
+      try {
+        await StaffSession.clear();
+      } catch (e) {
+        debugPrint('Không thể xóa phiên nhân viên đã lưu: $e');
+      }
+
       _user = null;
       _hospital = null;
       _admin = null;
@@ -681,8 +686,6 @@ class AuthProvider extends ChangeNotifier {
       _verificationId = null;
       _resendToken = null;
       _pendingPhone = null;
-    } catch (e) {
-      print('❌ Lỗi khi đăng xuất: $e');
     } finally {
       _isLoading = false;
       notifyListeners();

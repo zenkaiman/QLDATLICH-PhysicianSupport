@@ -59,6 +59,7 @@ class QLDatLichApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AdminProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: AppRoutes.navigatorKey,
         title: 'QLDATLICH',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
