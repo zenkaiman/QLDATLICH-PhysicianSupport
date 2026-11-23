@@ -88,4 +88,14 @@ void main() {
       expect(ketQua, <int>[-1, 3]);
     });
   });
+
+  group('Sổ "SỐ ĐÃ CHO QUA" sau khi chèn lại', () {
+    test('số đã chèn lại thì rời khỏi sổ cho qua', () {
+      // Bệnh nhân số 2 bấm "Đợi" (nằm trong sổ), rồi được chèn lại.
+      final soDaChoQua = <int>[2, 3];
+      final daChen = <int>{3};
+      soDaChoQua.removeWhere(daChen.contains);
+      expect(soDaChoQua, <int>[2], reason: 'chỉ số 3 rời sổ, số 2 còn đợi');
+    });
+  });
 }

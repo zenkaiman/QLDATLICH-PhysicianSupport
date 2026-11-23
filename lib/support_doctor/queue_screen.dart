@@ -1084,6 +1084,11 @@ class _QueueScreenState extends State<QueueScreen> {
             _requeuedAppointmentNumbers.add(number)) {
           newlyRequeuedNumbers.add(number);
         }
+        // Số đã lên lịch chèn và giờ đã thực sự vào hàng chờ thì rời khỏi
+        // “SỐ ĐÃ CHO QUA” — sổ đó chỉ giữ những ai còn đang đợi / đã vắng.
+        if (wasInserted) {
+          passed.removeWhere((entry) => entry.deferred && entry.number == number);
+        }
       }
       if (_daBatDau) {
         current = result.current;
@@ -1310,8 +1315,9 @@ class _QueueScreenState extends State<QueueScreen> {
     final finished = current;
     var shouldReportExamined = false;
     setState(() {
-      // “SỐ ĐÃ CHO QUA” là sổ ghi cố định của phòng: nút Tiếp theo KHÔNG
-      // xoá số nào khỏi đó. Chỉ nút “Đặt lại số” mới xoá toàn bộ.
+      // Nút Tiếp theo KHÔNG xoá số nào khỏi “SỐ ĐÃ CHO QUA”: sổ này chỉ
+      // mất số khi chính số đó được chèn lại vào hàng chờ, hoặc khi bấm
+      // “Đặt lại số”.
       if (!_currentConfirmed) {
         // Xác nhận khám: ghi số hiện tại vào danh sách đã khám.
         passed.add((number: finished, deferred: false));
@@ -1468,8 +1474,9 @@ class _QueueScreenState extends State<QueueScreen> {
     if (!mounted || confirmed != true) return;
 
     setState(() {
-      // “SỐ ĐÃ CHO QUA” là sổ ghi cố định: xác nhận vắng mặt chỉ bỏ số khỏi
-      // hàng chờ, không xoá số khỏi sổ. Chỉ “Đặt lại số” mới xoá toàn bộ.
+      // Xác nhận vắng mặt chỉ bỏ số khỏi hàng chờ, không xoá số khỏi
+      // “SỐ ĐÃ CHO QUA” (sổ chỉ mất số khi số đó được chèn lại vào hàng
+      // chờ, hoặc khi bấm “Đặt lại số”).
       _absentAppointmentNumbers.add(absentNumber);
       _requeuedAppointmentNumbers.remove(absentNumber);
       _scheduledFutureInserts.removeWhere(
@@ -1692,7 +1699,7 @@ class _QueueScreenState extends State<QueueScreen> {
     setState(() {
       // Bệnh nhân vào phòng khám ngay: bỏ khỏi danh sách "ĐÃ KHÁM" (sẽ được
       // ghi lại khi bác sĩ nhấn "Tiếp theo"). Riêng "SỐ ĐÃ CHO QUA" vẫn giữ
-      // nguyên – chỉ nút "Đặt lại số" mới xoá sổ này.
+      // nguyên – sổ này chỉ mất số khi số đó được chèn lại vào hàng chờ.
       passed.removeWhere(
         (entry) => entry.number == picked && !entry.deferred,
       );
@@ -1962,11 +1969,14 @@ class _QueueScreenState extends State<QueueScreen> {
         );
         _scheduledFutureInserts.add(insert);
       }
-      // Cả số chèn ngay lẫn số đã lên lịch vẫn được GIỮ trong “SỐ ĐÃ CHO
-      // QUA” (kèm số cũ + tên + mã lịch hẹn) để lễ tân còn đối chiếu; chỉ
-      // nút “Đặt lại số” mới xoá sổ này. Người được chèn lại vào hàng chờ
-      // nhận số mới nên không trùng số trong danh sách đang gọi.
       final insertedNumbers = results.map((r) => r.number).toSet();
+      // Số đã chèn NGAY vào hàng chờ thì RỜI khỏi “SỐ ĐÃ CHO QUA” — dải đó
+      // chỉ còn những người thực sự đang đợi / đã vắng. (Số chờ số mốc
+      // tương lai vẫn nằm lại trong sổ cho tới khi thực sự vào hàng chờ.)
+      // Tên và mã lịch hẹn giữ lại để dải “ĐÃ KHÁM”/tra cứu vẫn đúng.
+      passed.removeWhere(
+        (entry) => entry.deferred && insertedNumbers.contains(entry.number),
+      );
       // Số chèn ngay được giữ tạm trong hàng chờ và sẽ báo về trạng
       // thái `2` ngay sau setState. Số chờ mốc tương lai vẫn giữ `7`
       // cho tới khi thực sự được đặt vào hàng chờ ở một đợt đồng bộ sau.
@@ -2149,7 +2159,8 @@ class _QueueScreenState extends State<QueueScreen> {
       waiting = <int>[for (final so in waiting) doi(so)];
       // Chỉ số của những người ĐÃ KHÁM đi theo bảng đổi số. Sổ “SỐ ĐÃ CHO
       // QUA” (chip + lịch sử xin đợi) giữ nguyên số cũ, tên cũ và mã lịch
-      // hẹn cũ — không thao tác nào ngoài “Đặt lại số” được sửa sổ này.
+      // hẹn cũ — sổ chỉ mất số khi số đó được chèn lại vào hàng chờ (xem
+      // `openInsertScreen`) hoặc khi bấm “Đặt lại số”.
       for (var i = 0; i < passed.length; i++) {
         final entry = passed[i];
         if (entry.deferred) continue;
