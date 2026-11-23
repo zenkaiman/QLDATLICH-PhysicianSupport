@@ -15,8 +15,8 @@ class ThongTinLeTanC1 {
     required this.khoa,
     required this.email,
     this.avatarUrl = '',
-    this.benhVienId = 'BV502',
-    this.tenBenhVien = 'Bệnh viện Đa khoa Quốc tế',
+    this.benhVienId = '',
+    this.tenBenhVien = 'Bệnh viện',
   });
 
   ThongTinLeTanC1 copyWith({
@@ -55,10 +55,12 @@ class DuLieuProfileMauC1 {
   ];
 
   static ThongTinLeTanC1 thongTinHienTai = const ThongTinLeTanC1(
-    hoTen: 'Đinh Hoàng Cước',
-    chucVu: 'NHÂN VIÊN LỄ TÂN TIẾP ĐÓN',
-    maNhanVien: 'LT_TM_01',
-    khoa: 'Khoa Tim Mạch',
-    email: 'cuoc@gmail.com',
+    hoTen: 'Nhân viên',
+    chucVu: 'Nhân viên y tế',
+    maNhanVien: '',
+    khoa: 'Khoa Khám Bệnh',
+    email: '',
+    benhVienId: '',
+    tenBenhVien: 'Bệnh viện',
   );
 }

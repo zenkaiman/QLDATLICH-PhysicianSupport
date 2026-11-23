@@ -19,6 +19,7 @@ class CskhAppointmentCardC1 extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = AppDesignSystemC1.laCheDoToi;
     final rawTrangThai = (item['rawTrangThai'] ?? '').toString();
+    final bool laDaKham = rawTrangThai == '5' || rawTrangThai.contains('kham') || item['trangThai'] == 'Đã khám';
     final bool laDaDuyet = rawTrangThai == 'da_duyet' || item['trangThai'] == 'Đã duyệt';
     final bool laTuChoi = rawTrangThai == 'tu_choi' || item['trangThai'] == 'Không duyệt';
 
@@ -26,7 +27,21 @@ class CskhAppointmentCardC1 extends StatelessWidget {
     Color borderCard;
     Widget badgeTrangThai;
 
-    if (laDaDuyet) {
+    if (laDaKham) {
+      cardBg = isDark ? const Color(0xFF0C2444).withValues(alpha: 0.3) : const Color(0xFFEFF6FF);
+      borderCard = const Color(0xFF3B82F6);
+      badgeTrangThai = Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0C2444) : const Color(0xFFDBEAFE),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          '✓ Đã khám',
+          style: TextStyle(color: Color(0xFF1D4ED8), fontSize: 11, fontWeight: FontWeight.w700),
+        ),
+      );
+    } else if (laDaDuyet) {
       cardBg = isDark ? const Color(0xFF064E3B).withValues(alpha: 0.3) : const Color(0xFFECFDF5);
       borderCard = const Color(0xFF10B981);
       badgeTrangThai = Container(
@@ -74,8 +89,14 @@ class CskhAppointmentCardC1 extends StatelessWidget {
       );
     }
 
+    final btnSize = AppDesignSystemC1.scale(context, 36);
+    final btnFontSize = AppDesignSystemC1.scale(context, 16);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      padding: EdgeInsets.symmetric(
+        horizontal: AppDesignSystemC1.scale(context, 12),
+        vertical: AppDesignSystemC1.scale(context, 10),
+      ),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
@@ -84,15 +105,16 @@ class CskhAppointmentCardC1 extends StatelessWidget {
       child: Row(
         children: [
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               InkWell(
                 onTap: onApprove,
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  width: 36,
-                  height: 36,
+                  width: btnSize,
+                  height: btnSize,
                   decoration: BoxDecoration(
-                    color: laDaDuyet
+                    color: (laDaDuyet || laDaKham)
                         ? const Color(0xFF10B981)
                         : (isDark ? const Color(0xFF064E3B).withValues(alpha: 0.5) : const Color(0xFFECFDF5)),
                     borderRadius: BorderRadius.circular(10),
@@ -102,21 +124,21 @@ class CskhAppointmentCardC1 extends StatelessWidget {
                     child: Text(
                       '✓',
                       style: TextStyle(
-                        color: laDaDuyet ? Colors.white : const Color(0xFF059669),
-                        fontSize: 16,
+                        color: (laDaDuyet || laDaKham) ? Colors.white : const Color(0xFF059669),
+                        fontSize: btnFontSize,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: AppDesignSystemC1.scale(context, 6)),
               InkWell(
                 onTap: onReject,
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  width: 36,
-                  height: 36,
+                  width: btnSize,
+                  height: btnSize,
                   decoration: BoxDecoration(
                     color: laTuChoi
                         ? const Color(0xFFEF4444)
@@ -129,7 +151,7 @@ class CskhAppointmentCardC1 extends StatelessWidget {
                       '✕',
                       style: TextStyle(
                         color: laTuChoi ? Colors.white : const Color(0xFFDC2626),
-                        fontSize: 16,
+                        fontSize: btnFontSize,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -138,25 +160,32 @@ class CskhAppointmentCardC1 extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: AppDesignSystemC1.scale(context, 10)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'STT ${item['stt'] ?? '1'}: ${item['hoTen'] ?? 'Bệnh nhân'}',
+                  (item['so_thu_tu'] != null && item['so_thu_tu'].toString().isNotEmpty)
+                      ? 'STT ${item['so_thu_tu']}: ${item['hoTen'] ?? 'Bệnh nhân'}'
+                      : '${item['hoTen'] ?? 'Bệnh nhân'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF0F172A),
-                    fontSize: 14,
+                    fontSize: AppDesignSystemC1.scale(context, 14),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '${item['gioKham'] ?? ''} • ${item['gioiTinh'] ?? ''}, ${item['namSinh'] ?? ''} • ${item['tenKhoa'] ?? ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
-                    fontSize: 11.5,
+                    fontSize: AppDesignSystemC1.scale(context, 11.5),
                   ),
                 ),
                 if (item['lyDoTuChoi'] != null) ...[
@@ -165,14 +194,21 @@ class CskhAppointmentCardC1 extends StatelessWidget {
                     'Lý do: ${item['lyDoTuChoi']}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Color(0xFFEF4444), fontSize: 11, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      color: const Color(0xFFEF4444),
+                      fontSize: AppDesignSystemC1.scale(context, 11),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ],
             ),
           ),
           const SizedBox(width: 6),
-          badgeTrangThai,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: badgeTrangThai,
+          ),
         ],
       ),
     );

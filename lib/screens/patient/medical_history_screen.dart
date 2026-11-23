@@ -7,9 +7,7 @@ class MedicalHistoryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Hồ sơ bệnh án')),
-      body: const Center(
-        child: Text('Hồ sơ bệnh án trống.'),
-      ),
+      body: const Center(child: Text('Hồ sơ bệnh án trống.')),
     );
   }
 }

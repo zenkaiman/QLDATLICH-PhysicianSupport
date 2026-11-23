@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../mock/mock_c1/dulieu_mau_cskh_c1.dart';
+import '../../../models/letan_c1/cskh_constants_c1.dart';
 import '../../../models/letan_c1/letan_design_system_c1.dart';
 import '../../../services/letan_c1/letan_firebase_service_c1.dart';
 
@@ -67,55 +67,70 @@ class CskhRejectReasonBottomSheetC1 {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'MÃ ĐẶT LỊCH: ${don['maBenhNhan'] ?? don['id']}',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                (don['hoTen'] ?? 'Bệnh nhân').toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              Text(
-                                '${don['tenKhoa']} • ${don['gioKham']}',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 11.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                          Expanded(
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text(
-                                  'STT',
-                                  style: TextStyle(color: Colors.white70, fontSize: 9.5, fontWeight: FontWeight.w600),
+                                Text(
+                                  'MÃ ĐẶT LỊCH: ${don['maBenhNhan'] ?? don['id']}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  (don['hoTen'] ?? 'Bệnh nhân').toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                                 Text(
-                                  (don['stt'] ?? '1').toString(),
-                                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                                  '${don['tenKhoa']} • ${don['gioKham']}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 11.5,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
+                          if (don['so_thu_tu'] != null && don['so_thu_tu'].toString().isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      'STT',
+                                      style: TextStyle(color: Colors.white70, fontSize: 9.5, fontWeight: FontWeight.w600),
+                                    ),
+                                    Text(
+                                      don['so_thu_tu'].toString(),
+                                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -265,28 +280,41 @@ class CskhRejectReasonBottomSheetC1 {
                                     ? lyDoKhacController.text.trim()
                                     : cacLyDo[lyDoDangChon];
 
-                                final scaffoldMessenger = ScaffoldMessenger.of(context);
                                 final appointmentId = don['id'];
                                 final docPath = don['docPath'];
                                 Navigator.pop(ctx);
-                                if (appointmentId != null) {
-                                  await FirebaseServiceC1.capNhatTrangThaiLichHen(
-                                    appointmentId: appointmentId,
-                                    docPath: docPath,
-                                    trangThaiMoi: 'tu_choi',
-                                    lyDoTuChoi: lyDoChon,
-                                  );
-                                }
 
-                                onRejected?.call();
-
-                                scaffoldMessenger.showSnackBar(
-                                  SnackBar(
-                                    content: Text('✕ Đã từ chối đơn của ${don['hoTen']}: $lyDoChon'),
-                                    backgroundColor: const Color(0xFFEF4444),
-                                    behavior: SnackBarBehavior.floating,
-                                  ),
+                                // Optimistic UI: Phản hồi tức thì
+                                AppDesignSystemC1.hapticLight();
+                                AppDesignSystemC1.showCustomSnackBar(
+                                  context,
+                                  message: '✕ Đã từ chối đơn của ${don['hoTen']}: $lyDoChon',
+                                  isSuccess: false,
+                                  icon: Icons.cancel_rounded,
                                 );
+
+                                try {
+                                  if (appointmentId != null) {
+                                    await FirebaseServiceC1.capNhatTrangThaiLichHen(
+                                      appointmentId: appointmentId,
+                                      docPath: docPath,
+                                      trangThaiMoi: 'tu_choi',
+                                      lyDoTuChoi: lyDoChon,
+                                    );
+                                  }
+                                  AppDesignSystemC1.hapticSuccess();
+                                  onRejected?.call();
+                                } catch (_) {
+                                  AppDesignSystemC1.hapticError();
+                                  if (context.mounted) {
+                                    AppDesignSystemC1.showCustomSnackBar(
+                                      context,
+                                      message: '✕ Lỗi kết nối khi từ chối đơn khám!',
+                                      isSuccess: false,
+                                      icon: Icons.error_outline_rounded,
+                                    );
+                                  }
+                                }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFFEF4444),

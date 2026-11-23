@@ -34,13 +34,19 @@ class CskhBulkActionBarC1 extends StatelessWidget {
         children: [
           Expanded(
             child: SizedBox(
-              height: 46,
+              height: AppDesignSystemC1.scale(context, 46),
               child: ElevatedButton.icon(
                 onPressed: onRejectAll,
-                icon: const Icon(Icons.close_rounded, size: 18),
-                label: const Text(
-                  'Không duyệt hết',
-                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                icon: Icon(Icons.close_rounded, size: AppDesignSystemC1.scale(context, 18)),
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Không duyệt hết',
+                    style: TextStyle(
+                      fontSize: AppDesignSystemC1.scale(context, 13.5),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: isDark ? const Color(0xFF450A0A) : const Color(0xFFFEF2F2),
@@ -48,26 +54,34 @@ class CskhBulkActionBarC1 extends StatelessWidget {
                   side: const BorderSide(color: Color(0xFFF87171)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: AppDesignSystemC1.scale(context, 10)),
           Expanded(
             child: SizedBox(
-              height: 46,
+              height: AppDesignSystemC1.scale(context, 46),
               child: ElevatedButton.icon(
                 onPressed: onApproveAll,
-                icon: const Icon(Icons.check_rounded, size: 18),
-                label: Text(
-                  'Duyệt hết ($totalCount)',
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+                icon: Icon(Icons.check_rounded, size: AppDesignSystemC1.scale(context, 18)),
+                label: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'Duyệt hết ($totalCount)',
+                    style: TextStyle(
+                      fontSize: AppDesignSystemC1.scale(context, 13.5),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF10B981),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
               ),
             ),

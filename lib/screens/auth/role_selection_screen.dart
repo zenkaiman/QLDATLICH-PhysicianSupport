@@ -20,10 +20,16 @@ class RoleSelectionScreen extends StatelessWidget {
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final role = roles[index];
+
             return CustomButton(
               text: AppConstants.roleNames[role] ?? role.name,
               onPressed: () {
-                Navigator.pushReplacementNamed(context, AppRoutes.login);
+                Navigator.pushReplacementNamed(
+                  context,
+                  role == Role.hospital
+                      ? AppRoutes.hospitalRegister
+                      : AppRoutes.login,
+                );
               },
             );
           },

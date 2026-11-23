@@ -1,0 +1,57 @@
+# DANH SÁCH CÁC FILE ĐƯỢC PHÉP TẠO VÀ CHỈNH SỬA BỞI C1 (ĐINH HOÀNG CƯỚC)
+# Quy tắc:
+# 1. Chỉ được tạo mới và chỉnh sửa các file có trong danh sách này.
+# 2. KHÔNG ĐƯỢC tự ý xóa bất kỳ file nào (muốn xóa phải hỏi ý kiến C1).
+# 3. KHÔNG ĐƯỢC sửa đổi các file có sẵn khác của dự án trong thư mục lib.
+# 4. QUY TẮC TỔ CHỨC: Tạo thư mục riêng cho C1 bên trong các folder lớn.
+# 5. QUY TẮC ĐẶT TÊN: Sử dụng TIẾNG VIỆT KHÔNG DẤU, kèm đuôi _c1 để dễ hiểu, dễ nhớ và không đụng độ (ví dụ: letan_c1, duyetdon_c1, cskh_c1).
+# 6. QUY TẮC CODE: 
+#    - Dùng Flutter / Dart chuẩn.
+#    - Tên class, biến, hàm, file dùng tiếng Việt không dấu (viet_khong_dau).
+#    - Code ngắn gọn, tường minh, cấu trúc phẳng, dễ đọc, dễ hiểu, dễ sửa.
+#    - Không lạm dụng kiến trúc phức tạp hay lồng ghép widget quá sâu.
+# 7. LƯU Ý KHI GỘP CODE (MERGE GIT) VÀ HOẠT ĐỘNG NHÓM:
+#    - Tuyệt đối không tự ý thêm package vào pubspec.yaml (tránh dependency conflict).
+#    - Tự chủ Mock Data trong mock_c1, không phụ thuộc vào tiến độ Firebase của bạn khác.
+#    - Dùng Widget chuẩn của Flutter (Material Design), không phụ thuộc theme riêng biệt.
+#    - Điểm kết nối duy nhất với nhóm là AppRoutes hoặc qua Cổng điều hướng portal_c1.
+#    - Có màn hình Cổng điều hướng riêng (portal_c1) để demo/test độc lập mọi lúc.
+# 8. QUY TẮC MÀU SẮC VÀ GIAO DIỆN (ĐỒNG BỘ TOÀN APP):
+#    - Sử dụng chuẩn tông màu y hệt app gốc (AppTheme / theme chung):
+#      + Màu chủ đạo (Primary): Xanh dương y tế (Color(0xFF1E88E5))
+#      + Màu nền (Background): Xám xanh nhạt dịu mắt (Color(0xFFF5F7FB))
+#      + Card / Container nền trắng (Colors.white), bo góc 12-14px chuẩn.
+#      + AppBar: Nền trắng, chữ đen/xanh, elevation phẳng (0).
+#    - Đảm bảo màn hình Lễ tân và CSKH của C1 nhìn vào là cùng 1 thể thống nhất với toàn bộ ứng dụng, không bị lệch tông như 2 app khác nhau.
+
+[DANH SÁCH FILE VÀ THƯ MỤC CỦA C1]:
+- lib/c1_managed_files.txt
+- lib/models/letan_c1/letan_design_system_c1.dart
+- lib/models/letan_c1/letan_ui_components_c1.dart
+- lib/models/letan_c1/letan_qr_model_c1.dart
+- lib/models/letan_c1/letan_lichhen_model_c1.dart
+- lib/models/letan_c1/letan_profile_model_c1.dart
+- lib/screens/letan_c1/letan_quet_qr_camera_screen_c1.dart
+- lib/screens/letan_c1/letan_ketqua_qr_screen_c1.dart
+- lib/screens/letan_c1/letan_lichhen_screen_c1.dart
+- lib/screens/letan_c1/letan_timkiem_screen_c1.dart
+- lib/screens/letan_c1/letan_profile_tab_c1.dart
+- lib/screens/letan_c1/letan_capnhat_profile_screen_c1.dart
+- lib/screens/letan_c1/letan_doimatkhau_screen_c1.dart
+- lib/screens/letan_c1/letan_quenmatkhau_screen_c1.dart
+- lib/BaoCaoLoi.dart
+- lib/screens/letan_c1/letan_baocaoloi_screen_c1.dart
+- lib/screens/letan_c1/letan_baocao_thanhcong_screen_c1.dart
+- lib/screens/letan_c1/letan_trangchu_screen_c1.dart
+- lib/screens/letan_c1/letan_thietlap_thongtin_screen_c1.dart
+- lib/models/letan_c1/cskh_model_c1.dart
+- lib/mock/mock_c1/dulieu_mau_cskh_c1.dart
+- lib/screens/letan_c1/cskh_duyetdon_khoa_screen_c1.dart
+- lib/screens/letan_c1/cskh_danhsach_don_khoa_screen_c1.dart
+- lib/screens/letan_c1/cskh_danhsach_tinnhan_screen_c1.dart
+- lib/screens/letan_c1/cskh_chat_chitiet_screen_c1.dart
+- lib/screens/letan_c1/cskh_profile_tab_c1.dart
+- lib/services/letan_c1/letan_firebase_service_c1.dart
+- lib/chay_thu_c1.dart
+- lib/ghi_chu_c1.md
+- lib/screens/letan_c1/letan_dangnhap_screen_c1.dart

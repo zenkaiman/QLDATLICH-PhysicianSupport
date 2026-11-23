@@ -2,19 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../models/letan_c1/letan_design_system_c1.dart';
 
-/// Card hiển thị Khoa đang chọn / Khoa làm việc hiện tại kèm nút Đổi Khoa
+/// Card hiển thị Tên Khoa khám phụ trách trong phần duyệt đơn
 class CskhDepartmentSelectorCardC1 extends StatelessWidget {
   final String tenKhoaHienTai;
-  final VoidCallback onChangeDepartment;
-  final String label;
-  final String badgeText;
 
   const CskhDepartmentSelectorCardC1({
     super.key,
     required this.tenKhoaHienTai,
-    required this.onChangeDepartment,
-    this.label = 'KHOA HIỆN TẠI',
-    this.badgeText = 'Bệnh viện',
   });
 
   @override
@@ -45,11 +39,11 @@ class CskhDepartmentSelectorCardC1 extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: const Color(0xFFE0F2FE),
+              color: isDark ? const Color(0xFF0C2444) : const Color(0xFFE0F2FE),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
-              Icons.apartment_rounded,
+              Icons.local_hospital_rounded,
               color: Color(0xFF0284C7),
               size: 22,
             ),
@@ -58,76 +52,28 @@ class CskhDepartmentSelectorCardC1 extends StatelessWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 6,
-                  runSpacing: 2,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.4,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0F2FE),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        badgeText,
-                        style: const TextStyle(
-                          color: Color(0xFF0284C7),
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  'Chuyên khoa phụ trách',
+                  style: TextStyle(
+                    color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   tenKhoaHienTai,
                   style: TextStyle(
                     color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF0F172A),
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-            ),
-          ),
-          InkWell(
-            onTap: onChangeDepartment,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0284C7),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.swap_horiz_rounded, size: 16, color: Colors.white),
-                  SizedBox(width: 4),
-                  Text(
-                    'Đổi Khoa',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ],
