@@ -1955,6 +1955,18 @@ class AdminStore extends ChangeNotifier {
     _pendingSub?.cancel();
     _reportsSub?.cancel();
     _patientsSub?.cancel();
+    
+    // Xóa dữ liệu cache trong store khi đăng xuất
+    hospitals.clear();
+    pending.clear();
+    violations.clear();
+    reports.clear();
+    resolvedReports.clear();
+    patients.clear();
+    cancelledHospitals.clear();
+    pendingTotal = 0;
+    errorTotal = 0;
+    
     super.dispose();
   }
 }

@@ -71,8 +71,27 @@ class _MainShellState extends State<MainShell> {
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Đang đăng xuất...'),
+                    backgroundColor: kSlate900,
+                  ),
+                );
+                
+                // 1. Đăng xuất Firebase Auth & Provider
+                await context.read<AuthProvider>().logout();
+                
+                // 2. Xóa cache store và hủy các listener
+                await AdminStore.instance.dispose();
+                
+                // 3. Quay lại màn hình đăng nhập
+                Navigator.pushReplacementNamed(
+                  context,
+                  AppRoutes.login,
+                );
+                
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text('Đã đăng xuất khỏi tài khoản Quản trị viên'),
