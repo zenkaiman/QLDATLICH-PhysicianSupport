@@ -508,6 +508,7 @@ class ClinicFirestoreService {
   Future<void> updateAppointmentStatus({
     required String appointmentId,
     required String statusId,
+    int? soThuTu,
   }) async {
     final docRef = _firestore
         .collection(appointmentsCollection)
@@ -515,6 +516,10 @@ class ClinicFirestoreService {
 
     await docRef.update(<String, dynamic>{
       'trang_thai_id': statusId,
+      // Số thứ tự mới (nếu có) ghi CÙNG lượt với trạng thái `2`. Nhờ vậy
+      // lịch hẹn vừa được đưa lại vào hàng chờ đã đủ điều kiện để luồng
+      // realtime nạp lại ngay, không phải chờ lần ghi `so_thu_tu` riêng.
+      if (soThuTu != null && soThuTu > 0) 'so_thu_tu': soThuTu,
       'ngay_cap_nhat': FieldValue.serverTimestamp(),
     });
   }
@@ -630,7 +635,7 @@ class _FirestoreClinicRoomPickerScreenState
       appointmentId: appointmentId,
       soThuTu: soThuTu,
     ),
-    reportOutcome: (appointmentId, outcome) =>
+    reportOutcome: (appointmentId, outcome, {int? soThuTu}) =>
         _service.updateAppointmentStatus(
           appointmentId: appointmentId,
           statusId: switch (outcome) {
@@ -643,6 +648,7 @@ class _FirestoreClinicRoomPickerScreenState
             AppointmentOutcome.requeued =>
               ClinicFirestoreService.confirmedStatusId,
           },
+          soThuTu: soThuTu,
         ),
   );
 

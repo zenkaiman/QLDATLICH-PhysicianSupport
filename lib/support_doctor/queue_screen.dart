@@ -22,6 +22,15 @@ typedef InsertResult = ({int number, int? afterNumber});
 typedef QueueAction = ({int number, bool hold});
 
 /// Kết quả cần báo về cho lịch hẹn gắn với một số thứ tự.
+///
+/// Mã trạng thái tương ứng ghi lên `LichHen/{id}` (xem
+/// `ClinicFirestoreService`):
+///  - [examined]  → `5` đã khám xong
+///  - [absent]    → `6` vắng mặt
+///  - [deferred]  → `7` xin đợi (rời hàng chờ)
+///  - [requeued]  → `2` đã xác nhận — dùng khi bệnh nhân được đưa TRỞ LẠI
+///    hàng chờ (chèn lại / gọi lại). Kèm `so_thu_tu` mới trong cùng lượt
+///    ghi để lịch hẹn đủ điều kiện nạp lại ngay.
 enum AppointmentOutcome { examined, absent, deferred, requeued }
 
 /// Một đợt cập nhật số thứ tự lấy từ danh sách lịch hẹn đủ điều kiện.
@@ -461,12 +470,19 @@ class QueueScreen extends StatefulWidget {
   final Stream<AppointmentQueueUpdate> Function(DateTime day)?
   appointmentQueueForDay;
 
-  /// Báo kết quả khám xong/vắng mặt về nơi lưu lịch hẹn.
+  /// Báo kết quả khám xong/vắng mặt/xin đợi/trở lại hàng chờ về nơi lưu
+  /// lịch hẹn.
   ///
   /// Callback nhận mã lịch hẹn đã được ánh xạ từ số thứ tự trong các
-  /// đợt cập nhật của [appointmentQueueStream]. Lỗi của callback chỉ
-  /// hiện thông báo, không chặn thao tác gọi số trên màn hình.
-  final Future<void> Function(String appointmentId, AppointmentOutcome outcome)?
+  /// đợt cập nhật của [appointmentQueueStream]. `soThuTu` (tuỳ chọn) là số
+  /// thứ tự MỚI khi bệnh nhân trở lại hàng chờ (`AppointmentOutcome
+  /// .requeued`) — ghi cùng lượt với `trang_thai_id = 2`. Lỗi của callback
+  /// chỉ hiện thông báo, không chặn thao tác gọi số trên màn hình.
+  final Future<void> Function(
+    String appointmentId,
+    AppointmentOutcome outcome, {
+    int? soThuTu,
+  })?
   onAppointmentOutcome;
 
   /// Ghi số thứ tự mới của một lịch hẹn lên Firebase khi nhân viên chèn
@@ -1130,7 +1146,13 @@ class _QueueScreenState extends State<QueueScreen> {
       _syncRoomState();
     });
     for (final number in newlyRequeuedNumbers) {
-      _reportAppointmentOutcome(number, AppointmentOutcome.requeued);
+      // Số vừa thực sự vào hàng chờ (đã chèn theo số mốc) cũng được ghi
+      // `trang_thai_id = 2` kèm đúng số thứ tự đang hiển thị.
+      _reportAppointmentOutcome(
+        number,
+        AppointmentOutcome.requeued,
+        soThuTu: number,
+      );
     }
     // Đồng bộ xong thì chạy lại danh sách số: nếu dữ liệu trên Firebase bị
     // lỗ số / trùng số, màn hình tự sửa về dãy 1, 2, 3, … n.
@@ -1143,13 +1165,19 @@ class _QueueScreenState extends State<QueueScreen> {
   /// Báo kết quả của một số về lịch hẹn tương ứng, nếu có ánh xạ.
   /// Việc ghi diễn ra nền; lỗi ghi chỉ hiện thông báo để không làm
   /// gián đoạn thao tác gọi số của nhân viên.
-  void _reportAppointmentOutcome(int number, AppointmentOutcome outcome) {
+  void _reportAppointmentOutcome(
+    int number,
+    AppointmentOutcome outcome, {
+    int? soThuTu,
+  }) {
     final report = widget.onAppointmentOutcome;
     if (report == null) return;
     final appointmentId = _appointmentIdByNumber[number];
     if (appointmentId == null) return;
     unawaited(
-      report(appointmentId, outcome).catchError((Object error) {
+      report(appointmentId, outcome, soThuTu: soThuTu).catchError((
+        Object error,
+      ) {
         if (mounted) {
           notify(
             'Không cập nhật được trạng thái lịch hẹn của số $number '
@@ -1160,16 +1188,39 @@ class _QueueScreenState extends State<QueueScreen> {
     );
   }
 
+  /// Số thứ tự mà lịch hẹn đang có trên hàng chờ hiện tại.
+  ///
+  /// Sau khi đánh số lại, ánh xạ số → mã lịch hẹn đã đổi khoá nên phải
+  /// dò lại theo mã. [soDuPhong] là số lúc chốt trước khi đánh số (dùng khi
+  /// không dò được, ví dụ lịch hẹn vừa rời hàng chờ).
+  int? _soThuTuHienTaiCuaLichHen(String appointmentId, int soDuPhong) {
+    for (final so in <int>[
+      current,
+      next,
+      ...waiting,
+    ]) {
+      if (so <= 0) continue;
+      if (_appointmentIdByNumber[so] == appointmentId) return so;
+    }
+    for (final entry in _pendingRenumberByAppointmentId.entries) {
+      if (entry.key == appointmentId) return entry.value;
+    }
+    return soDuPhong > 0 ? soDuPhong : null;
+  }
+
   /// Báo kết quả cho một lịch hẹn theo mã (dùng khi số thứ tự vừa đổi
   /// nên không thể tra ngược từ số nữa).
   void _reportAppointmentOutcomeById(
     String appointmentId,
-    AppointmentOutcome outcome,
-  ) {
+    AppointmentOutcome outcome, {
+    int? soThuTu,
+  }) {
     final report = widget.onAppointmentOutcome;
     if (report == null) return;
     unawaited(
-      report(appointmentId, outcome).catchError((Object error) {
+      report(appointmentId, outcome, soThuTu: soThuTu).catchError((
+        Object error,
+      ) {
         if (mounted) {
           notify('Không cập nhật được trạng thái lịch hẹn lên Firebase.');
         }
@@ -2008,16 +2059,26 @@ class _QueueScreenState extends State<QueueScreen> {
       _syncRoomState();
     });
     // Chốt mã lịch hẹn của người vừa chèn TRƯỚC khi đánh số lại (sau đó
-    // khoá ánh xạ đã đổi sang số mới).
-    final canBaoTrangThai = <String>[
+    // khoá ánh xạ đã đổi sang số mới). Đánh số lại xong mới biết số thật
+    // của từng người nên phải chốt ở đây rồi tra lại số sau.
+    final canBaoTrangThai = <(String, int)>[
       for (final number in immediateNumbersToReport)
-        ?_appointmentIdByNumber[number],
+        if (_appointmentIdByNumber[number] case final appointmentId?)
+          (appointmentId, number),
     ];
     // Chạy lại danh sách số sau khi chèn: số vừa chèn nhận số mốc + 1,
     // các số phía sau tăng thêm 1 và được ghi lên Firebase.
     _chayLaiDanhSachSo(moDau: 'Đã đánh số lại hàng chờ');
-    for (final appointmentId in canBaoTrangThai) {
-      _reportAppointmentOutcomeById(appointmentId, AppointmentOutcome.requeued);
+    // Đưa bệnh nhân trở lại hàng chờ => ghi `trang_thai_id = 2` (Đã xác
+    // nhận) KÈM `so_thu_tu` mới trong CÙNG một lượt ghi, để:
+    //  - lịch hẹn rời trạng thái `7` (xin đợi) và đủ điều kiện nạp lại;
+    //  - không có khoảng trống giữa lần ghi `2` và lần ghi `so_thu_tu`.
+    for (final (appointmentId, soLucChot) in canBaoTrangThai) {
+      _reportAppointmentOutcomeById(
+        appointmentId,
+        AppointmentOutcome.requeued,
+        soThuTu: _soThuTuHienTaiCuaLichHen(appointmentId, soLucChot),
+      );
     }
   }
 
