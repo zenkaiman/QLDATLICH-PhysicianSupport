@@ -91,7 +91,7 @@ bool _isFutureScheduledInsert(InsertResult insert, int highestKnownNumber) =>
 /// xuất hiện trong [inserts]. Số nào vốn đã có mặt trong [waiting] (vd.
 /// trạng thái khôi phục từ phiên cũ) sẽ được rút ra trước rồi đặt lại
 /// theo số mốc mới, không bị trùng số.
-List<int> _waitingAfterInserts(
+List<int> waitingAfterInserts(
   List<int> waiting,
   List<InsertResult> inserts, {
   int? nextNumber,
@@ -150,6 +150,70 @@ List<int> _waitingAfterInserts(
     if (i < base.length) merged.add(base[i]);
   }
   return merged;
+}
+
+/// Tính bảng đổi số (số cũ → số mới) cho toàn bộ hàng chờ sau một thao tác.
+///
+/// [order] là thứ tự gọi hiện tại: số đang khám, số tiếp theo, rồi các số
+/// đang chờ. Số tạm ÂM là bệnh nhân vừa được chèn vào và chưa có số thật.
+///
+/// Hai quy tắc quan trọng (đây chính là chỗ từng gây lỗi “bấm Chèn mà không
+/// thấy số đâu” khi khoa chỉ có 1–3 số):
+///  1. Mốc neo được tính từ số THẬT đầu tiên, bỏ qua số tạm âm — nếu không,
+///     chèn lên đầu hàng chờ sẽ neo vào số âm và đẩy cả hàng về 0, 1…
+///  2. Mọi số tạm âm PHẢI được đổi thành số thật > 0, kể cả khi không có số
+///     nào khác bị đổi.
+Map<int, int> tinhBangDanhSoLai({
+  required List<int> order,
+  bool donTheoSoDaKham = false,
+  int soDaKhamLonNhat = 0,
+}) {
+  if (order.isEmpty) return <int, int>{};
+  final soDauCoThat = order.firstWhere((so) => so >= 0, orElse: () => 0);
+
+  // Số nền: số lớn nhất đã khám xong (khi bấm “Đợi”), hoặc ngay trước số
+  // thật đầu tiên (các trường hợp còn lại) — nhờ vậy màn hình tự sửa lỗi lỗ
+  // số/trùng số mà không kéo cả hàng chờ về 1.
+  var soMoi = 0;
+  if (donTheoSoDaKham) {
+    soMoi = soDaKhamLonNhat;
+  } else if (soDauCoThat > 0) {
+    soMoi = soDauCoThat - 1;
+  }
+  // Hàng chờ chỉ gồm số tạm âm: neo từ 0 để số vừa chèn nhận số 1 (số 0 là
+  // ô trống nên sẽ bị bỏ).
+  if (soMoi < 0) soMoi = 0;
+
+  // Chỉ dồn xuống khi số thật đầu hàng chờ đang nối tiếp số đã khám.
+  final dungSoNen = !donTheoSoDaKham ||
+      (soDauCoThat > soMoi && soDauCoThat <= soMoi + 2);
+  final renumber = <int, int>{};
+  if (dungSoNen) {
+    for (final so in order) {
+      soMoi += 1;
+      if (soMoi != so) renumber[so] = soMoi;
+    }
+  }
+
+  // Chốt an toàn: số tạm âm chưa có số thật thì lấy số kế tiếp sau số lớn
+  // nhất đang dùng, để bệnh nhân vừa chèn không bị “biến mất”.
+  final daCoSoThat = <int>{
+    for (final so in order)
+      if (so > 0) so,
+    for (final so in renumber.values) so,
+  };
+  var soLonNhat = daCoSoThat.fold<int>(0, (a, b) => b > a ? b : a);
+  for (final so in order) {
+    if (so >= 0 || renumber.containsKey(so)) continue;
+    var soThat = soLonNhat + 1;
+    while (daCoSoThat.contains(soThat)) {
+      soThat += 1;
+    }
+    renumber[so] = soThat;
+    daCoSoThat.add(soThat);
+    soLonNhat = soThat;
+  }
+  return renumber;
 }
 
 /// Đồng bộ hàng chờ (chế độ lấy số từ lịch hẹn) với tập số đủ điều kiện
@@ -1039,7 +1103,11 @@ class _QueueScreenState extends State<QueueScreen> {
       _scheduledFutureInserts
         ..clear()
         ..addAll(result.scheduledInserts);
-      lastIssued = result.lastIssued;
+      // `lastIssued` là "STT lớn nhất đã biết", chỉ được TĂNG. Nếu gán
+      // thẳng theo kết quả đồng bộ, con số này tụt ngay khi một số rời
+      // danh sách (bấm “Đợi”, khám xong) — khi đó chèn lại số cũ bị coi là
+      // "số mốc tương lai" và bị đẩy sang mục “SỐ CHỜ TỚI SỐ MỐC”.
+      if (result.lastIssued > lastIssued) lastIssued = result.lastIssued;
       if (selected != null && !waiting.contains(selected)) selected = null;
       // Phòng đã đóng: giữ nguyên thông báo "đóng phòng", không ghi đè
       // bằng các lời nhắn nạp số từ luồng realtime.
@@ -1881,7 +1949,7 @@ class _QueueScreenState extends State<QueueScreen> {
         immediateForQueue.add((number: soTam, afterNumber: insert.afterNumber));
       }
       // Chèn ngay: dựng lại hàng chờ trong một lượt theo các số mốc gốc.
-      waiting = _waitingAfterInserts(
+      waiting = waitingAfterInserts(
         before,
         immediateForQueue,
         nextNumber: next,
@@ -1965,7 +2033,11 @@ class _QueueScreenState extends State<QueueScreen> {
     if (next > 0 && !daDung.add(next)) next = 0;
     final waitingMoi = <int>[];
     for (final so in waiting) {
-      if (so <= 0) continue;
+      // Chỉ bỏ số 0 (ô trống). Số tạm ÂM là bệnh nhân vừa được chèn và
+      // chưa có số thật — phải giữ lại để bước đánh số bên dưới đổi nó
+      // thành số thật. Bỏ luôn số âm ở đây chính là lỗi "bấm Chèn mà số
+      // không xuất hiện" khi hàng chờ chỉ còn 1–3 số.
+      if (so == 0) continue;
       if (!daDung.add(so)) continue;
       waitingMoi.add(so);
     }
@@ -1993,26 +2065,15 @@ class _QueueScreenState extends State<QueueScreen> {
     //  - còn lại: NEO số đầu tiên, chỉ dồn các lỗ trống phía sau. Nhờ vậy
     //    màn hình tự sửa lỗi lỗ số/trùng số mà KHÔNG kéo cả hàng chờ về số 1
     //    khi phiên làm việc bắt đầu từ số khác (vd 5, 6…).
-    var soMoi = 0;
-    if (donTheoSoDaKham) {
-      for (final entry in passed) {
-        if (!entry.deferred && entry.number > soMoi) soMoi = entry.number;
-      }
-    } else if (order.isNotEmpty) {
-      soMoi = order.first - 1;
-    }
-    // Chỉ dồn xuống khi số đầu hàng chờ đang nối tiếp số đã khám (hoặc bắt
-    // đầu từ 1, 2). Trường hợp “Gọi lại” một số cũ thì giữ nguyên.
-    final dungSoNen = order.isNotEmpty &&
-        (!donTheoSoDaKham ||
-            (order.first > soMoi && order.first <= soMoi + 2));
-    final renumber = <int, int>{};
-    if (dungSoNen) {
-      for (final so in order) {
-        soMoi += 1;
-        if (soMoi != so) renumber[so] = soMoi;
-      }
-    }
+    final renumber = tinhBangDanhSoLai(
+      order: order,
+      donTheoSoDaKham: donTheoSoDaKham,
+      soDaKhamLonNhat: donTheoSoDaKham
+          ? passed
+                .where((entry) => !entry.deferred)
+                .fold<int>(0, (a, b) => b.number > a ? b.number : a)
+          : 0,
+    );
 
     if (renumber.isEmpty) {
       if (canVeLai) setState(() {});
@@ -2036,7 +2097,9 @@ class _QueueScreenState extends State<QueueScreen> {
     if (next > 0 && !daDung.add(next)) next = 0;
     final waitingMoi = <int>[];
     for (final so in waiting) {
-      if (so <= 0) continue;
+      // Giữ số tạm âm (bệnh nhân vừa chèn, chờ đánh số thật) — xem
+      // `_chayLaiDanhSachSo`.
+      if (so == 0) continue;
       if (!daDung.add(so)) continue;
       waitingMoi.add(so);
     }
@@ -2142,19 +2205,23 @@ class _QueueScreenState extends State<QueueScreen> {
     final thayDoi = renumber.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     final moTa = <String>[
-      for (final entry in thayDoi) 'số ${entry.key} → ${entry.value}',
+      // Bỏ qua số tạm âm: đó là bệnh nhân vừa chèn, người dùng không biết
+      // "số -1" nào nên chỉ hiện các số thật bị đổi.
+      for (final entry in thayDoi)
+        if (entry.key > 0) 'số ${entry.key} → ${entry.value}',
     ].join(', ');
+    final moTaHienThi = moTa.isEmpty ? 'đã xếp lại hàng chờ' : moTa;
 
     final ghi = widget.onRenumberAppointment;
     if (ghi == null) {
-      if (!imLang) notify('$moDau: $moTa.');
+      if (!imLang) notify('$moDau: $moTaHienThi.');
       return;
     }
 
     for (final (appointmentId, soTheoLich) in canGhi) {
       _pendingRenumberByAppointmentId[appointmentId] = soTheoLich;
     }
-    if (!imLang) notify('$moDau và cập nhật Firebase: $moTa.');
+    if (!imLang) notify('$moDau và cập nhật Firebase: $moTaHienThi.');
 
     var loi = 0;
     for (final (appointmentId, soTheoLich) in canGhi) {
@@ -2891,7 +2958,7 @@ class _InsertPositionScreenState extends State<InsertPositionScreen> {
     final futureResults = draft.results
         .where((r) => _isFutureScheduledInsert(r, widget.lastIssued))
         .toList();
-    final mergedWaiting = _waitingAfterInserts(
+    final mergedWaiting = waitingAfterInserts(
       widget.waiting,
       immediateResults,
       nextNumber: widget.nextNumber,
