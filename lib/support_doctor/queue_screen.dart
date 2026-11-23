@@ -1154,12 +1154,10 @@ class _QueueScreenState extends State<QueueScreen> {
         soThuTu: number,
       );
     }
-    // Đồng bộ xong thì chạy lại danh sách số: nếu dữ liệu trên Firebase bị
-    // lỗ số / trùng số, màn hình tự sửa về dãy 1, 2, 3, … n.
-    // Chỉ làm khi không còn đợt đánh số nào đang chờ ghi để tránh ghi đè nhau.
-    if (_pendingRenumberByAppointmentId.isEmpty) {
-      _chayLaiDanhSachSo(imLang: true);
-    }
+    // Không đánh số lại trong callback realtime. Mỗi lần cập nhật Firestore
+    // có thể chỉ mang một phần của đợt nhiều bệnh nhân quay lại; tự sửa số
+    // ở đây sẽ ghi đè các STT còn đang được cập nhật và làm hàng chờ nhảy số.
+    // Đổi STT chỉ thực hiện một lần sau thao tác người dùng (chèn/đợi).
   }
 
   /// Báo kết quả của một số về lịch hẹn tương ứng, nếu có ánh xạ.
