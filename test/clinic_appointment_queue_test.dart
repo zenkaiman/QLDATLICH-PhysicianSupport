@@ -55,5 +55,32 @@ void main() {
 
       expect(day, DateTime(2026, 11, 23));
     });
+
+    test('ưu tiên đúng trường so_thu_tu của Firebase, không lấy alias cũ', () {
+      expect(
+        clinicAppointmentNumber(<String, Object?>{
+          'so_thu_tu': '27',
+          'stt': 8,
+        }),
+        27,
+      );
+      expect(
+        clinicAppointmentNumber(<String, Object?>{
+          'so_thu_tu': null,
+          'stt': 8,
+        }),
+        isNull,
+        reason: 'khóa chuẩn có mặt thì không thay bằng một STT khác',
+      );
+    });
+
+    test('nhận số nguyên dạng số hoặc chuỗi, không làm tròn số thập phân', () {
+      expect(clinicAppointmentNumber(<String, Object?>{'so_thu_tu': 12}), 12);
+      expect(clinicAppointmentNumber(<String, Object?>{'so_thu_tu': '12'}), 12);
+      expect(
+        clinicAppointmentNumber(<String, Object?>{'so_thu_tu': 12.5}),
+        isNull,
+      );
+    });
   });
 }
