@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../models/phong_kham_model.dart';
-import '../../models/review_model.dart';
-import '../../providers/lich_hen_provider.dart';
+import '../models/phong_kham_model.dart';
+import '../models/review_model.dart';
+import '../providers/lich_hen_provider.dart';
 
 class BookingHelper {
   /// departmentIdOf: lấy id của khoa (ưu tiên 'id', không có thì dùng 'ten_khoa').
