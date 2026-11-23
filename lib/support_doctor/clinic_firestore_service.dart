@@ -1115,18 +1115,29 @@ String _stringOrNumberField(Map<String, Object?> data, List<String> keys) {
   return '';
 }
 
-/// Số thứ tự của một lịch hẹn (trường `so_thu_tu`, có thể lưu dạng
-/// chuỗi '4' hoặc số 4). Thiếu/không hợp lệ/không dương thì null.
+/// Số thứ tự chính xác của lịch hẹn trong Firestore (`so_thu_tu`).
+/// Chấp nhận số hoặc chuỗi số nguyên, không tự làm tròn số thập phân.
+/// Các tên trường cũ chỉ được dùng khi document không có khóa chuẩn.
 int? clinicAppointmentNumber(Map<String, Object?> data) {
-  for (final key in const ['so_thu_tu', 'soThuTu', 'stt', 'so_thu_tu_kham']) {
-    final value = data[key];
+  int? parsePositiveInteger(Object? value) {
+    num? number;
     if (value is num) {
-      final number = value.toInt();
-      if (number > 0) return number;
+      number = value;
     } else if (value is String) {
-      final number = int.tryParse(value.trim());
-      if (number != null && number > 0) return number;
+      number = num.tryParse(value.trim());
     }
+    if (number == null || !number.isFinite || number <= 0) return null;
+    if (number != number.roundToDouble()) return null;
+    return number.toInt();
+  }
+
+  if (data.containsKey('so_thu_tu')) {
+    return parsePositiveInteger(data['so_thu_tu']);
+  }
+  for (final key in const ['soThuTu', 'stt', 'so_thu_tu_kham']) {
+    if (!data.containsKey(key)) continue;
+    final legacyNumber = parsePositiveInteger(data[key]);
+    if (legacyNumber != null) return legacyNumber;
   }
   return null;
 }
