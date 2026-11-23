@@ -1112,7 +1112,10 @@ class FirebaseServiceC1 {
     // Số 1: Chờ duyệt | Số 2: Đã xác nhận (TrangThai/2) | Số 4: Hủy / Không duyệt (TrangThai/4)
     final String newStatusId = trangThaiMoi == 'da_duyet' ? '2' : (trangThaiMoi == 'tu_choi' ? '4' : '1');
 
-    int? capNhatStt = soThuTuChiDinh;
+    // STT âm (ví dụ -1/-2) chỉ là số tạm dùng nội bộ khi xếp hàng; tuyệt đối
+    // không được ghi các giá trị đó xuống Firestore.
+    int? capNhatStt =
+        soThuTuChiDinh != null && soThuTuChiDinh > 0 ? soThuTuChiDinh : null;
     if (trangThaiMoi == 'da_duyet' && capNhatStt == null) {
       // Nếu trước đó đang ở trạng thái đã duyệt và đã có so_thu_tu hợp lệ thì giữ nguyên
       if (alreadyApproved && existingStt is num && existingStt.toInt() > 0) {
@@ -1162,7 +1165,7 @@ class FirebaseServiceC1 {
     };
 
     if (trangThaiMoi == 'da_duyet') {
-      if (capNhatStt != null) {
+      if (capNhatStt != null && capNhatStt > 0) {
         updateData['so_thu_tu'] = capNhatStt;
         updateData['stt'] = FieldValue.delete();
       }
