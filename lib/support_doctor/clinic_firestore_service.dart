@@ -1388,33 +1388,70 @@ String clinicPatientProfileName(Map<String, Object?> data) {
 
 /// Ngày hẹn (chỉ phần ngày, giờ địa phương) của một lịch hẹn.
 ///
-/// Ưu tiên trường `ngay_dat` dạng chuỗi ISO/Timestamp đã được chuẩn
-/// hoá thành ISO; `...T17:00:00Z` của nửa đêm giờ Việt Nam sẽ quy về
-/// đúng ngày hôm sau khi thiết bị đặt múi giờ địa phương. Thiếu hoặc
-/// không đọc được trường này thì suy từ mã document dạng
-/// `LH_yyyyMMdd_xxxxx`.
+/// Firestore lưu `ngay_dat` chủ yếu dưới dạng Timestamp, nhưng dữ liệu cũ
+/// còn có thể là DateTime hoặc chuỗi ISO / dd/MM/yyyy. Đọc cả các tên trường
+/// lịch cũ để tránh bỏ sót lịch đã xác nhận khỏi hàng chờ. Cuối cùng mới
+/// suy ngày từ mã document, hỗ trợ cả DDMMYYYY và YYYYMMDD.
 DateTime? clinicAppointmentDay(
   String appointmentId,
   Map<String, Object?> data,
 ) {
-  final raw = _firstStringField(data, const [
+  for (final key in const [
     'ngay_dat',
     'ngayDat',
     'ngay_hen',
     'ngayHen',
+    'ngay_kham',
+    'ngayKham',
+    'ngay_hien_thi',
+    'ngayHienThi',
     'appointmentDate',
-  ]);
-  final parsed = raw == null ? null : DateTime.tryParse(raw);
-  if (parsed != null) {
-    final local = parsed.toLocal();
-    return DateTime(local.year, local.month, local.day);
+    'date',
+  ]) {
+    final value = data[key];
+    DateTime? parsed;
+    if (value is Timestamp) {
+      parsed = value.toDate();
+    } else if (value is DateTime) {
+      parsed = value;
+    } else if (value is String && value.trim().isNotEmpty) {
+      final raw = value.trim();
+      parsed = DateTime.tryParse(raw);
+      if (parsed == null) {
+        final match = RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$')
+            .firstMatch(raw);
+        if (match != null) {
+          final day = int.parse(match.group(1)!);
+          final month = int.parse(match.group(2)!);
+          final year = int.parse(match.group(3)!);
+          if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+            parsed = DateTime(year, month, day);
+          }
+        }
+      }
+    }
+    if (parsed != null) {
+      final local = parsed.toLocal();
+      return DateTime(local.year, local.month, local.day);
+    }
   }
 
-  final match = RegExp(r'(\d{4})(\d{2})(\d{2})').firstMatch(appointmentId);
-  if (match == null) return null;
-  final year = int.parse(match.group(1)!);
-  final month = int.parse(match.group(2)!);
-  final day = int.parse(match.group(3)!);
+  // ID mới: ..._LH_DDMMYYYY_NNNNN. ID cũ/test có thể dùng YYYYMMDD.
+  final dmy = RegExp(r'_LH_(\d{2})(\d{2})(\d{4})(?:_|$)')
+      .firstMatch(appointmentId);
+  if (dmy != null) {
+    final day = int.parse(dmy.group(1)!);
+    final month = int.parse(dmy.group(2)!);
+    final year = int.parse(dmy.group(3)!);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return DateTime(year, month, day);
+    }
+  }
+  final ymd = RegExp(r'(\d{4})(\d{2})(\d{2})').firstMatch(appointmentId);
+  if (ymd == null) return null;
+  final year = int.parse(ymd.group(1)!);
+  final month = int.parse(ymd.group(2)!);
+  final day = int.parse(ymd.group(3)!);
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   return DateTime(year, month, day);
 }
