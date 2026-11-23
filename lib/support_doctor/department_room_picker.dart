@@ -1234,7 +1234,14 @@ typedef ClinicAppointmentFeed = ({
   /// vào. Khi đổi ngày, QueueScreen hủy đăng ký cũ và nghe luồng mới này.
   Stream<AppointmentQueueUpdate> Function(DateTime day) updatesForDay,
 
-  Future<void> Function(String appointmentId, AppointmentOutcome outcome)
+  /// Báo kết quả cho một lịch hẹn. `soThuTu` (tuỳ chọn) là số thứ tự MỚI
+  /// cần ghi CÙNG lượt khi đưa bệnh nhân trở lại hàng chờ, để lịch hẹn đủ
+  /// điều kiện nạp lại ngay ở trạng thái `2`.
+  Future<void> Function(
+    String appointmentId,
+    AppointmentOutcome outcome, {
+    int? soThuTu,
+  })
   reportOutcome,
 
   /// Ghi số thứ tự mới của một lịch hẹn khi nhân viên chèn số: số vừa
