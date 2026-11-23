@@ -785,105 +785,126 @@ class _DepartmentRoomPickerState<T> extends State<DepartmentRoomPicker<T>> {
           },
           child: Padding(
             padding: EdgeInsets.all(compact ? 14 : 16),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  width: compact ? 52 : 58,
-                  height: compact ? 52 : 58,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    gradient: badgeGradient,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Text(
-                    widget.roomIdOf(room),
-                    style: TextStyle(
-                      fontSize: compact ? 14 : 16,
-                      fontWeight: FontWeight.w800,
-                      color: paused ? const Color(0xFF3A2A00) : Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              widget.roomNameOf(room),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: compact ? 14 : 15,
-                                fontWeight: FontWeight.w800,
-                                color: _PickerUi.text,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          _PickerRoomStatus(
-                            label: widget.statusLabelOf(room),
-                            foreground: statusColor,
-                            background: statusBackground,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'BV ${widget.hospitalIdOf(room)}  ·  '
-                        'Khoa ${widget.departmentIdOf(room)}',
+                // Tên phòng và trạng thái giữ ở phần đầu, ngoài khung thông tin.
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.roomNameOf(room),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: _PickerUi.faint,
-                          fontWeight: FontWeight.w600,
+                        style: TextStyle(
+                          fontSize: compact ? 14 : 15,
+                          fontWeight: FontWeight.w800,
+                          color: _PickerUi.text,
                         ),
                       ),
-                      const SizedBox(height: 9),
-                      Wrap(
-                        spacing: 11,
-                        runSpacing: 6,
-                        children: [
-                          _PickerMeta(
-                            icon: Icons.person_rounded,
-                            text: (widget.currentNumberOf(room) ?? 0) <= 0
-                                ? 'Chưa gọi số'
-                                : 'Số ${widget.currentNumberOf(room)}',
-                          ),
-                          _PickerMeta(
-                            icon: Icons.groups_rounded,
-                            text: '${widget.waitingCountOf(room)} đang đợi',
-                          ),
-                          _PickerMeta(
-                            icon: Icons.task_alt_rounded,
-                            text: '${widget.examinedCountOf(room)} đã khám',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    _PickerRoomStatus(
+                      label: widget.statusLabelOf(room),
+                      foreground: statusColor,
+                      background: statusBackground,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: closed
-                        ? const Color(0xFFF2F4F8)
-                        : const Color(0x14107FE8),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    closed
-                        ? Icons.lock_outline_rounded
-                        : Icons.arrow_forward_rounded,
-                    size: 18,
-                    color: closed ? _PickerUi.faint : const Color(0xFF107FE8),
-                  ),
+                const SizedBox(height: 11),
+                // Mã phòng giữ riêng; chỉ khung thông tin bên phải được tô màu.
+                Row(
+                  children: [
+                    Container(
+                      width: compact ? 46 : 52,
+                      height: compact ? 46 : 52,
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      decoration: BoxDecoration(
+                        gradient: badgeGradient,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          widget.roomIdOf(room),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: TextStyle(
+                            fontSize: compact ? 13 : 15,
+                            fontWeight: FontWeight.w800,
+                            color: paused
+                                ? const Color(0xFF3A2A00)
+                                : Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Container(
+                        padding: EdgeInsets.all(compact ? 10 : 12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEAF5FF),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFCBE5FF)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'BV ${widget.hospitalIdOf(room)}  ·  '
+                                    'Khoa ${widget.departmentIdOf(room)}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Color(0xFF3D6F9F),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Icon(
+                                  closed
+                                      ? Icons.lock_outline_rounded
+                                      : Icons.arrow_forward_rounded,
+                                  size: 18,
+                                  color: closed
+                                      ? _PickerUi.faint
+                                      : const Color(0xFF107FE8),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 6,
+                              children: [
+                                _PickerMeta(
+                                  icon: Icons.person_rounded,
+                                  text: (widget.currentNumberOf(room) ?? 0) <= 0
+                                      ? 'Chưa gọi số'
+                                      : 'Số ${widget.currentNumberOf(room)}',
+                                ),
+                                _PickerMeta(
+                                  icon: Icons.groups_rounded,
+                                  text: '${widget.waitingCountOf(room)} đang đợi',
+                                ),
+                                _PickerMeta(
+                                  icon: Icons.task_alt_rounded,
+                                  text: '${widget.examinedCountOf(room)} đã khám',
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
