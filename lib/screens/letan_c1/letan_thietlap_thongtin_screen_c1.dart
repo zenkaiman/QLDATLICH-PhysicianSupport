@@ -6,7 +6,6 @@ import '../../services/letan_c1/letan_firebase_service_c1.dart';
 import 'cskh_duyetdon_khoa_screen_c1.dart';
 import 'letan_trangchu_screen_c1.dart';
 import '../../support_doctor/clinic_firestore_service.dart';
-import '../../support_doctor/department_room_picker.dart';
 
 /// MÀN HÌNH 3: THIẾT LẬP THÔNG TIN KHI LẦN ĐẦU ĐĂNG NHẬP (FIGMA C1)
 /// Nhân viên nhập Mã nhân viên được cấp -> Bổ sung Gmail, Họ tên, Ngày sinh, Giới tính, Mật khẩu mới.

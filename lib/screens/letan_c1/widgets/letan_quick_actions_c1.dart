@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/letan_c1/letan_design_system_c1.dart';
-import '../letan_timkiem_screen_c1.dart';
 
 /// Dãy chức năng thao tác nhanh cuộn ngang của Lễ tân
 class LetanQuickActionsC1 extends StatelessWidget {
@@ -62,12 +61,7 @@ class LetanQuickActionsC1 extends StatelessWidget {
                 mauIcon: const Color(0xFF007AFF),
                 mauNenIcon: isDark ? const Color(0xFF0C2444) : const Color(0xFFE8F4FD),
                 isDark: isDark,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LetanTimkiemScreenC1()),
-                  );
-                },
+                onTap: onOpenLichHen,
               ),
               const SizedBox(width: 10),
 
@@ -114,7 +108,7 @@ class LetanQuickActionsC1 extends StatelessWidget {
               _buildItem(
                 context: context,
                 tieuDe: 'Hồ sơ lễ tân',
-                moTa: 'Đổi mật khẩu / Khoa',
+                moTa: 'Đổi mật khẩu / Thông tin',
                 iconData: Icons.person_outline,
                 mauIcon: const Color(0xFF8B5CF6),
                 mauNenIcon: isDark ? const Color(0xFF23143E) : const Color(0xFFF3E8FF),

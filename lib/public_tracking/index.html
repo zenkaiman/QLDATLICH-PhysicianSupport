@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Theo dõi lịch khám</title>
+<style>
+:root{
+  --primary:#0B5CAD;--primary-dark:#083D75;--teal:#12A594;--teal-dark:#0B7A6C;
+  --bg:#F2F6F8;--surface:#fff;--ink:#14232F;--muted:#6B7C89;--line:#DCE5EB;
+  --warn-bg:#FFF5E1;--warn-border:#F2C46D;--warn-text:#8A5A00;--danger:#D64545;
+  --late:#F97316;--late-dark:#9A3412;--late-bg:#FFF3E0;--late-border:#FED7AA;
+  --closed:#475569;--closed-bg:#EEF1F4;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Be Vietnam Pro",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg);color:var(--ink);padding-bottom:40px;max-width:560px;margin:0 auto}
+.app-bar{padding:16px 20px 12px;position:sticky;top:0;z-index:10;background:var(--bg)}
+.app-bar h1{font-size:19px;font-weight:800}
+.app-bar p{font-size:12px;color:var(--muted);margin-top:2px}
+.wrap{padding:0 16px}
+.card{background:var(--surface);border-radius:22px;border:1px solid rgba(220,229,235,.7);
+  box-shadow:0 8px 18px rgba(11,42,74,.06);margin-bottom:16px;overflow:hidden}
+.pad{padding:16px}
+.muted{color:var(--muted)}
+.center{text-align:center}
+
+/* state views */
+.state{text-align:center;padding:60px 28px;color:var(--muted)}
+.state .big{width:90px;height:90px;border-radius:50%;margin:0 auto 18px;display:flex;align-items:center;
+  justify-content:center;font-size:42px}
+.state h3{color:var(--ink);font-size:18px;font-weight:800;margin-bottom:8px}
+.state p{font-size:14px;line-height:1.5}
+.btn{margin-top:20px;border:0;background:var(--primary);color:#fff;font:inherit;font-weight:700;
+  padding:13px 24px;border-radius:14px;cursor:pointer}
+.spinner{width:40px;height:40px;border:4px solid rgba(11,92,173,.2);border-top-color:var(--primary);
+  border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+.spinner.sm{width:22px;height:22px;border-width:2.5px;margin:0;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.index-link{color:var(--primary);word-break:break-all;font-size:12px;margin-top:12px;display:block}
+
+/* person bar */
+.person{display:flex;align-items:center;gap:8px;background:rgba(11,92,173,.08);border-radius:14px;
+  padding:10px 14px;margin-bottom:14px;font-size:13px;font-weight:700;color:var(--primary-dark)}
+
+/* hospital card */
+.h-head{background:linear-gradient(135deg,var(--primary-dark),var(--primary));padding:16px;color:#fff;
+  display:flex;align-items:center;gap:12px}
+.h-icon{width:48px;height:48px;border-radius:15px;background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:24px;flex:none}
+.h-info{flex:1;min-width:0}
+.h-info small{font-size:12px;opacity:.75;display:block}
+.h-info h2{font-size:16.5px;font-weight:700;line-height:1.25;margin-top:2px}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:20px;font-size:11.5px;
+  font-weight:700;border:1px solid;white-space:nowrap;flex:none}
+.room{margin:16px 16px 12px;padding:14px;border-radius:16px;display:flex;align-items:center;gap:12px;
+  background:linear-gradient(135deg,rgba(18,165,148,.14),rgba(18,165,148,.05));border:1px solid rgba(18,165,148,.25)}
+.room-icon{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--teal),var(--teal-dark));
+  display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 10px rgba(18,165,148,.35);flex:none}
+.room-info{flex:1;min-width:0}
+.room-info .lb{font-size:10.5px;font-weight:800;color:var(--teal-dark);letter-spacing:.8px}
+.room-info .nm{font-size:17px;font-weight:800;line-height:1.25;margin:2px 0}
+.room-info .dp{font-size:13px;color:var(--muted)}
+.dt-row{display:flex;gap:12px;padding:0 16px 16px}
+.dt{flex:1;background:rgba(11,92,173,.06);border-radius:14px;padding:12px;display:flex;align-items:center;gap:10px;min-width:0}
+.dt-i{width:34px;height:34px;border-radius:10px;background:rgba(11,92,173,.12);display:flex;
+  align-items:center;justify-content:center;flex:none}
+.dt span{font-size:11.5px;color:var(--muted);display:block}
+.dt strong{font-size:14px;font-weight:700;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* now serving */
+.serving{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;text-align:center;
+  padding:18px 20px 22px;position:relative;overflow:hidden;box-shadow:0 12px 24px rgba(11,92,173,.32);border-radius:26px}
+.serving::before{content:'';position:absolute;top:-50px;right:-50px;width:180px;height:180px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.14)}
+.serving::after{content:'';position:absolute;top:-15px;right:-15px;width:110px;height:110px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.14)}
+.s-top{display:flex;justify-content:space-between;align-items:center;position:relative;z-index:1}
+.s-lb{font-size:15px;font-weight:600;opacity:.9}
+.live{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.2);
+  padding:5px 10px;border-radius:20px;font-size:12.5px;font-weight:600}
+.dot{width:8px;height:8px;background:#5CF2D6;border-radius:50%;animation:blink 1.1s infinite alternate}
+@keyframes blink{from{opacity:.35}to{opacity:1}}
+.s-num{font-size:88px;font-weight:800;line-height:1.05;margin:8px 0 6px;font-variant-numeric:tabular-nums;position:relative;z-index:1}
+.s-sub{font-size:13px;opacity:.75;position:relative;z-index:1}
+
+/* locked */
+.lock-wrap{position:relative}
+.lock-wrap.locked>.inner{pointer-events:none;opacity:.45;filter:grayscale(1)}
+.lock-tag{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.lock-tag span{background:rgba(20,35,47,.88);color:#fff;padding:9px 14px;border-radius:24px;font-size:13px;font-weight:700}
+
+/* my turn */
+.turn{display:flex}
+.bar{width:6px;background:var(--teal);flex:none}
+.bar.late{background:var(--late)}
+.turn-c{flex:1;padding:16px;min-width:0}
+.turn-h{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.mynum{background:linear-gradient(135deg,rgba(18,165,148,.16),rgba(18,165,148,.06));border:1px solid rgba(18,165,148,.25);
+  border-radius:18px;padding:10px 18px;text-align:center}
+.mynum.late{background:var(--late-bg);border-color:var(--late-border)}
+.mynum span{font-size:10.5px;font-weight:800;color:var(--teal-dark);letter-spacing:.8px;display:block}
+.mynum.late span{color:var(--late-dark)}
+.mynum strong{font-size:46px;font-weight:800;color:var(--teal-dark);line-height:1.1;display:block;font-variant-numeric:tabular-nums}
+.mynum.late strong{color:rgba(249,115,22,.55);text-decoration:line-through;text-decoration-color:var(--late-dark);text-decoration-thickness:2px}
+.ahead{text-align:right}
+.ahead .lb{font-size:13px;color:var(--muted);display:block}
+.ahead .bn{font-size:32px;font-weight:800;line-height:1.2}
+.ahead .bn small{font-size:15px;font-weight:600;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:4px;background:rgba(11,92,173,.1);padding:4px 10px;border-radius:20px;
+  margin-top:4px;font-size:12.5px;font-weight:700;color:var(--primary)}
+.pill.late{background:var(--late-bg);border:1px solid var(--late-border);color:var(--late-dark)}
+.banner{margin-top:14px;padding:10px 12px;border-radius:12px;display:flex;align-items:flex-start;gap:10px;
+  font-size:13px;font-weight:600;line-height:1.4}
+.b-teal{background:rgba(18,165,148,.13);color:var(--teal-dark)}
+.b-warn{background:var(--warn-bg);color:var(--warn-text)}
+.b-primary{background:rgba(11,92,173,.08);color:var(--primary-dark)}
+.b-late{background:var(--late-bg);color:var(--late-dark)}
+
+/* queue track */
+.track-h{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:700}
+.track-h b{margin-left:auto;color:var(--primary);font-weight:800}
+.track{position:relative;height:22px;margin:18px 0 12px}
+.track .bg,.track .fill{position:absolute;left:0;top:6px;height:10px;border-radius:6px}
+.track .bg{right:0;background:var(--line)}
+.track .fill{background:linear-gradient(90deg,var(--primary),var(--teal));transition:width .7s cubic-bezier(.2,.8,.2,1)}
+.track .thumb{position:absolute;top:0;width:22px;height:22px;border-radius:50%;background:#fff;border:4px solid var(--teal);
+  box-shadow:0 2px 8px rgba(18,165,148,.4);transition:left .7s cubic-bezier(.2,.8,.2,1)}
+.track-l{display:flex;justify-content:space-between}
+.track-l small{font-size:12px;color:var(--muted);display:block}
+.track-l strong{font-size:17px;font-weight:800}
+
+/* estimate */
+.est{display:flex;align-items:center;gap:12px;padding:14px;border-radius:18px;border:1px solid rgba(11,92,173,.18);
+  background:rgba(11,92,173,.07);color:var(--primary-dark)}
+.est.warn{background:var(--warn-bg);border-color:var(--warn-border);color:var(--warn-text)}
+.est.late{background:var(--late-bg);border-color:var(--late-border);color:var(--late-dark)}
+.est-i{width:46px;height:46px;border-radius:14px;background:rgba(11,92,173,.12);display:flex;align-items:center;
+  justify-content:center;font-size:23px;flex:none}
+.est.warn .est-i{background:rgba(242,196,109,.35)}
+.est.late .est-i{background:rgba(254,215,170,.6)}
+.est-m{flex:1;min-width:0}
+.est-m small{font-size:12.5px;display:block}
+.est-m strong{font-size:22px;font-weight:800;display:block;line-height:1.25}
+.est-n{font-size:11.5px;color:var(--muted);text-align:right;line-height:1.4;max-width:42%}
+
+/* cards */
+.msg{text-align:center;padding:22px}
+.msg .ic{width:70px;height:70px;border-radius:50%;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:32px}
+.msg h4{font-size:16.5px;font-weight:800}
+.msg p{font-size:14px;color:var(--muted);line-height:1.5;margin-top:8px}
+.done-ic{background:linear-gradient(135deg,var(--teal),var(--teal-dark));color:#fff;font-weight:800}
+.steps3{display:flex;align-items:flex-start;margin-top:18px}
+.steps3 .st{flex:1;font-size:11.5px;font-weight:600;line-height:1.3;white-space:pre-line}
+.steps3 .st i{display:flex;width:46px;height:46px;border-radius:15px;background:rgba(11,92,173,.1);
+  align-items:center;justify-content:center;font-style:normal;font-size:22px;margin:0 auto 8px}
+.steps3 .ar{padding-top:10px;color:var(--line);font-size:22px}
+
+.sec-t{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:800;margin-bottom:14px}
+.sec-t::before{content:'';width:4px;height:18px;border-radius:2px;background:var(--teal)}
+.sec-t.late::before{background:var(--late)}
+.tl{display:flex;gap:12px}
+.tl-l{width:34px;display:flex;flex-direction:column;align-items:center;flex:none}
+.tl-c{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px}
+.tl-c.done{background:rgba(18,165,148,.14);color:var(--teal)}
+.tl-c.cur{background:var(--late-bg);border:2px solid var(--late)}
+.tl-c.up{background:rgba(220,229,235,.5);color:var(--muted)}
+.tl-line{width:2px;flex:1;margin:4px 0;background:var(--line)}
+.tl-line.done{background:rgba(18,165,148,.4)}
+.tl-b{padding:2px 0 16px}
+.tl:last-child .tl-b{padding-bottom:0}
+.tl-b strong{font-size:14px;display:block}
+.tl-b.up strong{color:var(--muted)}
+.tl-b span{font-size:12.5px;color:var(--muted);line-height:1.4;display:block;margin-top:2px}
+
+.chk{display:flex;align-items:center;gap:12px;margin-bottom:12px;font-size:13.5px;font-weight:500;line-height:1.4}
+.chk:last-child{margin-bottom:0}
+.chk i{width:34px;height:34px;border-radius:10px;background:rgba(18,165,148,.12);display:flex;align-items:center;
+  justify-content:center;font-style:normal;flex:none}
+.chk span{flex:1}
+.chk b{color:var(--teal)}
+.notice{display:flex;gap:12px;padding:16px;border-radius:18px;background:var(--warn-bg);border:1px solid var(--warn-border);color:var(--warn-text)}
+.notice .ni{width:40px;height:40px;border-radius:12px;background:rgba(242,196,109,.35);display:flex;align-items:center;
+  justify-content:center;font-size:22px;flex:none}
+.notice strong{font-size:15.5px;display:block;margin-bottom:4px}
+.notice p{font-size:13.5px;line-height:1.5}
+
+.paused{display:flex;gap:14px;padding:16px;border-radius:20px;background:var(--warn-bg);border:1px solid var(--warn-border);
+  color:var(--warn-text);margin-bottom:16px}
+.paused .pi{width:48px;height:48px;border-radius:50%;background:rgba(242,196,109,.4);display:flex;align-items:center;
+  justify-content:center;font-size:26px;flex:none}
+.paused strong{font-size:15.5px;font-weight:800;display:block;margin-bottom:4px}
+.paused p{font-size:13px;line-height:1.45}
+.paused .pm{display:inline-block;margin-top:10px;padding:5px 10px;border-radius:20px;background:rgba(255,255,255,.7);
+  border:1px solid var(--warn-border);font-size:12.5px;font-weight:700}
+.closed-h{background:linear-gradient(135deg,#64748B,var(--closed));color:#fff;text-align:center;padding:24px 20px 22px}
+.closed-h .ci{width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,.16);border:2px solid rgba(255,255,255,.3);
+  display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 14px}
+.closed-h h4{font-size:18.5px;font-weight:800}
+.closed-h p{font-size:13px;opacity:.8;margin-top:6px}
+.closed-r{display:flex;align-items:center;gap:12px;margin-bottom:12px;font-size:13.5px;font-weight:500;line-height:1.4}
+.closed-r:last-child{margin-bottom:0}
+.closed-r i{width:36px;height:36px;border-radius:11px;background:var(--closed-bg);display:flex;align-items:center;
+  justify-content:center;font-style:normal;flex:none}
+</style>
+</head>
+<body>
+<div class="app-bar">
+  <h1>Theo dõi lịch khám</h1>
+  <p>Số thứ tự cập nhật theo thời gian thực</p>
+</div>
+<div class="wrap" id="app"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, doc, getDoc, getDocs, onSnapshot, collection, query, where, limit }
+  from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA2Xz4YxJUhVQiSv-QWT1stp3A-HIiWRB4",
+  authDomain: "datlichkham-37558.firebaseapp.com",
+  projectId: "datlichkham-37558",
+  storageBucket: "datlichkham-37558.firebasestorage.app",
+  messagingSenderId: "494400810225",
+  appId: "1:494400810225:web:6589ad21bca5aeee59cd50",
+  measurementId: "G-0DZFNW3QNM"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+const appointmentId = new URLSearchParams(location.search).get('id');
+const app = document.getElementById('app');
+
+/* ---------- Hằng số (giống bản Flutter) ---------- */
+// trang_thai_id lịch hẹn: 1 chờ duyệt, 2 đã xác nhận, 3/4 đã hủy, 5 hoàn thành, 6 vắng mặt, 7 đến trễ
+const STATUS = {
+  pending:  { label:'Chờ duyệt',   icon:'⏳', fg:'#0B5CAD', bg:'#E6F0FA', bd:'#B9D3EC' },
+  approved: { label:'Đã xác nhận', icon:'✔️', fg:'#0B7A6C', bg:'#E3F6F3', bd:'#A8DDD5' },
+  cancelled:{ label:'Đã hủy',      icon:'✖️', fg:'#D64545', bg:'#FDECEC', bd:'#F3BDBD' },
+  completed:{ label:'Hoàn thành',  icon:'✅', fg:'#0B7A6C', bg:'#E3F6F3', bd:'#A8DDD5' },
+  missed:   { label:'Vắng mặt',    icon:'🚫', fg:'#475569', bg:'#EEF1F4', bd:'#CBD5E1' },
+  late:     { label:'Đến trễ',     icon:'🕒', fg:'#9A3412', bg:'#FFF3E0', bd:'#FED7AA' },
+};
+function statusOf(id){
+  switch(String(id)){
+    case '1': return 'pending';
+    case '2': return 'approved';
+    case '5': return 'completed';
+    case '6': return 'missed';
+    case '7': return 'late';
+    default:  return 'cancelled'; // 3, 4 và giá trị lạ
+  }
+}
+const OUT_OF_QUEUE = new Set(['3','4','5','6','7']);
+// phòng khám: 12 tạm dừng, 13 đang khám, 14 đóng cửa
+const ROOM = { PAUSED:12, SERVING:13, CLOSED:14 };
+const CA_DEFAULT = {
+  ca_sang:{ten_ca:'Ca sáng',gio_bat_dau:'07:30',gio_ket_thuc:'11:30'},
+  ca_chieu:{ten_ca:'Ca chiều',gio_bat_dau:'13:30',gio_ket_thuc:'17:00'},
+};
+const DEFAULT_PER_PATIENT = 15;
+
+/* ---------- State ---------- */
+const S = {
+  loading:true, notFound:false, error:null, indexUrl:null,
+  appt:null, extra:{}, extraKey:null,
+  room:{ status:ROOM.SERVING, tamDungTu:null, tong:0, ngay:null }, roomLoaded:false,
+  queue:[], queueLoaded:false, queueError:null,
+  thoiGianKham:null,
+  stamps:[],            // [{serving, t}] để ước lượng thời gian/bệnh nhân khi không có cấu hình
+  lastServing:null,
+};
+let unsubAppt=null, unsubQueue=null, unsubRoom=null, listenKey=null;
+
+/* ---------- Tiện ích ---------- */
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const p2 = n => String(n).padStart(2,'0');
+const hhmm = d => `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+const fmtDate = d => `${p2(d.getDate())}/${p2(d.getMonth()+1)}/${d.getFullYear()}`;
+const ngayId = d => `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+const sameDay = (a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+const toDate = v => (v && typeof v.toDate==='function') ? v.toDate() : null;
+const toInt = v => { const n = typeof v==='number'?v:parseInt(v,10); return Number.isFinite(n)?n:null; };
+const atTime = (day,s)=>{
+  if(!s) return null; const p=String(s).split(':'); if(p.length<2) return null;
+  const h=parseInt(p[0],10), m=parseInt(p[1],10); if(isNaN(h)||isNaN(m)) return null;
+  return new Date(day.getFullYear(),day.getMonth(),day.getDate(),h,m);
+};
+
+/* ---------- Trạng thái phòng ---------- */
+function roomPausedNow(now=new Date()){
+  if(S.room.status!==ROOM.PAUSED||!S.room.tamDungTu) return 0;
+  return Math.max(0, Math.floor((now - S.room.tamDungTu)/60000));
+}
+function roomPauseTotal(now=new Date()){
+  const acc = S.room.ngay===ngayId(now) ? (S.room.tong||0) : 0;
+  return acc + roomPausedNow(now);
+}
+
+/* ---------- Ước lượng thời gian ---------- */
+function perPatientMinutes(){
+  if(S.thoiGianKham) return S.thoiGianKham;
+  // dự phòng: trung bình khoảng cách giữa các lần số đang khám thay đổi
+  const st=S.stamps;
+  if(st.length>=2){
+    const first=st[0], last=st[st.length-1];
+    const steps = last.serving-first.serving;
+    if(steps>0){
+      const avg=(last.t-first.t)/60000/steps;
+      if(avg>=1 && avg<=120) return Math.round(avg);
+    }
+  }
+  return DEFAULT_PER_PATIENT;
+}
+function estimateTurn(ngayKham,gioBD,gioKT,waitMin,pauseMin){
+  const now=new Date(), start=atTime(ngayKham,gioBD), end=atTime(ngayKham,gioKT);
+  const notStarted = !!start && now<start;
+  const base = notStarted ? start : now;
+  const eta = new Date(base.getTime()+(waitMin+pauseMin)*60000);
+  return { eta, exceeds: !!end && eta>end, shiftNotStarted:notStarted };
+}
+
+/* ---------- Lắng nghe dữ liệu ---------- */
+function showIndexLink(err){
+  const m = (err.message||'').match(/https:\/\/console\.firebase\.google\.com[^\s]+/);
+  if(m) S.indexUrl=m[0];
+}
+function startAppt(){
+  unsubAppt = onSnapshot(doc(db,'LichHen',appointmentId), snap=>{
+    S.loading=false;
+    if(!snap.exists()){ S.notFound=true; S.appt=null; render(); return; }
+    S.notFound=false; S.error=null;
+    const d=snap.data();
+    S.appt = {
+      id:snap.id,
+      benhVienId:String(d.benh_vien_id??''), khoaId:String(d.khoa_id??''),
+      phongKhamId:String(d.phong_kham_id??''), caId:String(d.ca_id??''),
+      status:String(d.trang_thai_id??''), ngayDat:toDate(d.ngay_dat),
+      soThuTu:Number(d.so_thu_tu)||0,
+      tenBenhVien:d.ten_benh_vien||null, tenKhoa:d.ten_khoa||null, tenPhong:d.ten_phong_kham||null,
+      gioBD:d.gio_bat_dau||null, gioKT:d.gio_ket_thuc||null,
+      tenNguoiKham:d.ten_nguoi_kham||null, quanHe:d.quan_he||null,
+    };
+    enrich(S.appt);
+    syncListeners();
+    render();
+  }, err=>{
+    console.error(err); S.loading=false; S.error='Không tải được lịch khám.'; showIndexLink(err); render();
+  });
+}
+
+// Bổ sung giờ ca, tên khoa, tên phòng nếu lịch hẹn không lưu kèm (giống getLichHenCuaBenhNhan)
+async function enrich(a){
+  const key=[a.caId,a.benhVienId,a.khoaId,a.phongKhamId].join('|');
+  if(S.extraKey===key) return;
+  S.extraKey=key; S.extra={};
+  try{
+    const tasks=[];
+    if((!a.gioBD||!a.gioKT)&&a.caId){
+      tasks.push(getDoc(doc(db,'Ca',a.caId)).then(s=>{
+        const c = s.exists()?s.data():(CA_DEFAULT[a.caId]||{});
+        S.extra.gioBD=c.gio_bat_dau||(CA_DEFAULT[a.caId]||{}).gio_bat_dau;
+        S.extra.gioKT=c.gio_ket_thuc||(CA_DEFAULT[a.caId]||{}).gio_ket_thuc;
+      }).catch(()=>{}));
+    }
+    if(!a.tenKhoa&&a.benhVienId&&a.khoaId){
+      tasks.push(getDoc(doc(db,'Khoa',a.benhVienId,'danh_sach',a.khoaId)).then(s=>{
+        if(s.exists()) S.extra.tenKhoa=s.data().ten_khoa||s.data().tenKhoa;
+      }).catch(()=>{}));
+    }
+    if(!a.tenPhong&&a.phongKhamId){
+      tasks.push(getDoc(doc(db,'PhongKham',a.phongKhamId)).then(s=>{
+        if(s.exists()){const d=s.data(); S.extra.tenPhong=d.tenPhongKham||d.ten_phong_kham||d.tenPhong||d.ten;}
+      }).catch(()=>{}));
+    }
+    if(!a.tenBenhVien&&a.benhVienId){
+      tasks.push(getDoc(doc(db,'BenhVien',a.benhVienId)).then(s=>{
+        if(s.exists()) S.extra.tenBenhVien=s.data().ten_benh_vien;
+      }).catch(()=>{}));
+    }
+    await Promise.all(tasks); render();
+  }catch(e){console.warn(e)}
+}
+
+// Thời gian khám mỗi bệnh nhân (giống HospitalService.getThoiGianKhamPhong)
+async function loadThoiGianKham(a,key){
+  const valid=v=>{const n=toInt(v);return n&&n>0?n:null};
+  let minutes=null;
+  try{
+    if(a.phongKhamId){
+      const s=await getDoc(doc(db,'PhongKham',a.phongKhamId));
+      if(s.exists()){
+        const d=s.data();
+        if(String(d.hospitalId)===a.benhVienId&&String(d.khoaId)===a.khoaId)
+          minutes=valid(d.thoiGianKham??d.thoi_gian_kham);
+      }else{
+        const q=await getDocs(query(collection(db,'PhongKham'),
+          where('hospitalId','==',a.benhVienId),where('khoaId','==',a.khoaId),
+          where('tenPhong','==',a.phongKhamId),limit(1)));
+        if(!q.empty){const d=q.docs[0].data(); minutes=valid(d.thoiGianKham??d.thoi_gian_kham);}
+      }
+    }
+    if(minutes==null&&a.benhVienId&&a.khoaId){
+      const k=await getDoc(doc(db,'Khoa',a.benhVienId,'danh_sach',a.khoaId));
+      if(k.exists()){const d=k.data(); minutes=valid(d.thoi_gian_kham??d.thoiGianKham);}
+    }
+  }catch(e){console.warn('Lỗi lấy thời gian khám',e)}
+  if(listenKey!==key) return;
+  S.thoiGianKham=minutes; render();
+}
+
+function stopListeners(){
+  unsubQueue&&unsubQueue(); unsubRoom&&unsubRoom();
+  unsubQueue=unsubRoom=null; listenKey=null;
+  S.queue=[]; S.queueLoaded=false; S.queueError=null;
+  S.roomLoaded=false; S.room={status:ROOM.SERVING,tamDungTu:null,tong:0,ngay:null};
+  S.thoiGianKham=null; S.stamps=[]; S.lastServing=null;
+}
+// Chỉ lắng nghe hàng chờ + phòng khi lịch đã xác nhận hoặc đến trễ
+function syncListeners(){
+  const a=S.appt;
+  const tracking = a && (a.status==='2'||a.status==='7');
+  if(!tracking||!a.phongKhamId||!a.ngayDat){ if(listenKey) stopListeners(); return; }
+  const key=[a.id,a.benhVienId,a.khoaId,a.phongKhamId,a.ngayDat.getTime()].join('|');
+  if(listenKey===key) return;
+  stopListeners(); listenKey=key;
+
+  loadThoiGianKham(a,key);
+
+  // Hàng chờ: chỉ lọc bằng ==, phần còn lại lọc phía client để khỏi cần composite index
+  unsubQueue=onSnapshot(query(collection(db,'LichHen'),
+      where('benh_vien_id','==',a.benhVienId),
+      where('khoa_id','==',a.khoaId),
+      where('phong_kham_id','==',a.phongKhamId)),
+    snap=>{
+      const ngay=a.ngayDat;
+      S.queue = snap.docs.map(x=>{
+          const d=x.data();
+          return {id:x.id, status:String(d.trang_thai_id??''), ngay:toDate(d.ngay_dat||d.ngay_hen), so:Number(d.so_thu_tu)||0};
+        })
+        .filter(b=>b.ngay&&sameDay(b.ngay,ngay)&&b.status==='2'&&b.so>0)
+        .sort((x,y)=>x.so-y.so);
+      S.queueLoaded=true; S.queueError=null;
+      trackServing(); render();
+    },
+    err=>{
+      console.error(err); showIndexLink(err);
+      S.queueError='Không tải được hàng chờ. Vui lòng tải lại trang để thử lại.'; render();
+    });
+
+  // Trạng thái phòng khám
+  unsubRoom=onSnapshot(doc(db,'PhongKham',a.phongKhamId), snap=>{
+    const d=snap.exists()?snap.data():null;
+    if(!d) S.room={status:ROOM.SERVING,tamDungTu:null,tong:0,ngay:null};
+    else{
+      const st=toInt(d.trang_thai_id);
+      S.room={
+        status: st===ROOM.PAUSED?ROOM.PAUSED: st===ROOM.CLOSED?ROOM.CLOSED:ROOM.SERVING,
+        tamDungTu: toDate(d.tam_dung_tu),
+        tong: toInt(d.tong_phut_tam_dung)||0,
+        ngay: d.ngay_tam_dung?String(d.ngay_tam_dung):null,
+      };
+    }
+    S.roomLoaded=true; render();
+  }, err=>{ console.error(err); });
+}
+function trackServing(){
+  const cur=S.queue.length?S.queue[0].so:0;
+  if(cur>0&&cur!==S.lastServing){
+    S.lastServing=cur; S.stamps.push({serving:cur,t:Date.now()});
+    if(S.stamps.length>8) S.stamps.shift();
+  }
+}
+
+/* ---------- Render helpers ---------- */
+const lock=(locked,html)=> locked
+  ? `<div class="lock-wrap locked"><div class="inner">${html}</div><div class="lock-tag"><span>🔒 Tạm khóa theo dõi</span></div></div>`
+  : html;
+
+const msgCard=(icon,color,title,text)=>`
+  <div class="card msg"><div class="ic" style="background:${color}1A">${icon}</div>
+  <h4>${esc(title)}</h4><p>${esc(text)}</p></div>`;
+
+const nowServingCard=n=>`
+  <div class="serving" style="margin-bottom:16px">
+    <div class="s-top"><div class="s-lb">📢 Đang khám số</div><div class="live"><div class="dot"></div>Trực tiếp</div></div>
+    <div class="s-num">${n>0?n:'---'}</div>
+    <div class="s-sub">🔄 Tự động cập nhật theo thời gian thực</div>
+  </div>`;
+
+const pausedCard=min=>`
+  <div class="paused"><div class="pi">⏸️</div><div>
+    <strong>Phòng khám đang tạm dừng</strong>
+    <p>Việc khám tạm thời gián đoạn. Giờ dự kiến đến lượt sẽ tự động cộng thêm thời gian tạm dừng.</p>
+    <span class="pm">⏱️ Đã tạm dừng ${min} phút</span></div></div>`;
+
+const closedCard=()=>`
+  <div class="card">
+    <div class="closed-h"><div class="ci">🔒</div><h4>Phòng khám đã đóng cửa</h4><p>Hiện không tiếp nhận bệnh nhân</p></div>
+    <div class="pad">
+      <div class="closed-r"><i>🚫</i><span>Theo dõi số thứ tự và giờ dự kiến đã dừng.</span></div>
+      <div class="closed-r"><i>🎧</i><span>Vui lòng liên hệ quầy tiếp đón để được hỗ trợ.</span></div>
+      <div class="closed-r"><i>📅</i><span>Bạn có thể đặt lại lịch khám vào ngày khác.</span></div>
+    </div></div>`;
+
+function myTurnCard(number,ahead,wait){
+  let cls,icon,text;
+  if(ahead===0){cls='b-teal';icon='🔔';text='Sắp đến lượt bạn! Vui lòng có mặt tại phòng khám.';}
+  else if(ahead<=3){cls='b-warn';icon='🚶';text=`Còn ${ahead} người nữa. Hãy di chuyển đến phòng khám.`;}
+  else{cls='b-primary';icon='💺';text='Bạn có thể nghỉ ngơi, chúng tôi sẽ báo khi gần đến lượt.';}
+  return `<div class="card turn"><div class="bar"></div><div class="turn-c">
+    <div class="turn-h">
+      <div class="mynum"><span>SỐ CỦA BẠN</span><strong>${number}</strong></div>
+      <div class="ahead"><span class="lb">Còn phía trước</span>
+        <div class="bn">${ahead} <small>người</small></div>
+        <div class="pill">⏱️ ~${wait} phút</div></div>
+    </div>
+    <div class="banner ${cls}"><span>${icon}</span><span>${text}</span></div>
+  </div></div>`;
+}
+function queueTrack(serving,mine){
+  const p=(mine>0&&serving>0)?Math.min(1,Math.max(0,serving/mine)):0;
+  const pct=Math.round(p*100);
+  return `<div class="card pad" style="margin-top:16px">
+    <div class="track-h">🛣️ Tiến độ hàng chờ <b>${pct}%</b></div>
+    <div class="track">
+      <div class="bg"></div>
+      <div class="fill" style="width:calc((100% - 22px) * ${p} + 11px)"></div>
+      <div class="thumb" style="left:calc((100% - 22px) * ${p})"></div>
+    </div>
+    <div class="track-l">
+      <div><small>Đang khám</small><strong style="color:var(--primary)">${serving>0?'#'+serving:'---'}</strong></div>
+      <div style="text-align:right"><small>Số của bạn</small><strong style="color:var(--teal-dark)">#${mine}</strong></div>
+    </div></div>`;
+}
+function estimateCard(e,wait,pausedMin,shiftStart){
+  const pauseNote = pausedMin>0?` Đã cộng ${pausedMin} phút phòng tạm dừng.`:'';
+  let note;
+  if(e.exceeds) note='Số lượng bệnh nhân đông, vui lòng liên hệ quầy tiếp đón.';
+  else if(e.shiftNotStarted) note=`Ca khám bắt đầu lúc ${esc(shiftStart||'')}. Còn ~${wait} phút phục vụ trước bạn.${pauseNote}`;
+  else note=`Còn ~${wait} phút (tham khảo).${pauseNote}`;
+  return `<div class="est ${e.exceeds?'warn':''}" style="margin-top:0">
+    <div class="est-i">${e.exceeds?'⚠️':'⏲️'}</div>
+    <div class="est-m"><small>${e.exceeds?'Cảnh báo thời gian':'Dự kiến đến lượt khoảng'}</small>
+      <strong>${e.exceeds?'Có thể sang ca khám sau':hhmm(e.eta)}</strong></div>
+    <div class="est-n">${note}</div></div>`;
+}
+const queueStatusCard=(loading,text)=>`
+  <div class="card pad" style="display:flex;align-items:center;gap:14px">
+    ${loading?'<div class="spinner sm"></div>':'<span style="font-size:24px">☁️</span>'}
+    <span style="font-size:14px;font-weight:600;line-height:1.4">${esc(text)}</span></div>`;
+
+const noTicketCard=timeLabel=>`
+  <div class="card msg">
+    <div class="ic" style="background:rgba(107,124,137,.1)">⏳</div>
+    <h4>Chưa được cấp số thứ tự</h4>
+    <p>Vui lòng có mặt tại bệnh viện trước ${esc(timeLabel)} để được nhân viên tiếp đón và cấp số.</p>
+    <div class="steps3">
+      <div class="st"><i>🏥</i>Đến\nbệnh viện</div><div class="ar">›</div>
+      <div class="st"><i>📷</i>Quét mã QR\ncheck-in</div><div class="ar">›</div>
+      <div class="st"><i>🎫</i>Nhận số\nthứ tự</div>
+    </div></div>`;
+
+function lateTicketCard(n){
+  return `<div class="card turn"><div class="bar late"></div><div class="turn-c">
+    <div class="turn-h">
+      <div class="mynum late"><span>SỐ CỦA BẠN</span><strong>${n>0?n:'--'}</strong></div>
+      <div class="ahead"><span class="lb">Còn phía trước</span>
+        <div class="bn" style="color:var(--muted)">—</div>
+        <div class="pill late">🕒 Chưa xác định</div></div>
+    </div>
+    <div class="banner b-late"><span>ℹ️</span><span>Bạn đến trễ nên số thứ tự cũ đã được đưa ra khỏi hàng chờ. Vui lòng gặp nhân viên hỗ trợ tại phòng khám để được xếp lại.</span></div>
+  </div></div>`;
+}
+function tlStep(state,icon,title,sub,last){
+  const cls={done:'done',cur:'cur',up:'up'}[state];
+  return `<div class="tl"><div class="tl-l"><div class="tl-c ${cls}">${icon}</div>${last?'':`<div class="tl-line ${state==='done'?'done':''}"></div>`}</div>
+    <div class="tl-b ${state==='up'?'up':''}"><strong>${title}</strong><span>${sub}</span></div></div>`;
+}
+const lateSteps=()=>`
+  <div class="card pad"><div class="sec-t late">Việc cần làm tiếp theo</div>
+    ${tlStep('done','✓','Đã ghi nhận bạn đến trễ','Số thứ tự cũ được đưa ra khỏi hàng chờ.')}
+    ${tlStep('cur','🎧','Gặp nhân viên hỗ trợ','Đến quầy hỗ trợ tại phòng khám và xuất trình mã QR.')}
+    ${tlStep('up','🔢','Được xếp lại vào hàng chờ','Bạn sẽ nhận số mới và thông báo khi sắp đến lượt.',true)}
+  </div>`;
+const lateEstimate=()=>`
+  <div class="est late"><div class="est-i">⏲️</div>
+    <div class="est-m"><small>Dự kiến đến lượt</small><strong style="font-size:20px">Chưa xác định</strong></div>
+    <div class="est-n">Sẽ tự cập nhật sau khi nhân viên xếp lại số cho bạn.</div></div>`;
+
+const prepareCard=()=>`
+  <div class="card pad" style="margin-top:24px"><div class="sec-t">Chuẩn bị trước khi khám</div>
+    <div class="chk"><i>🪪</i><span>Mang theo CCCD và thẻ BHYT (nếu có)</span><b>✔</b></div>
+    <div class="chk"><i>📱</i><span>Chuẩn bị sẵn mã QR lịch khám để check-in</span><b>✔</b></div>
+    <div class="chk"><i>🔔</i><span>Giữ điện thoại để nhận thông báo khi đến lượt</span><b>✔</b></div>
+  </div>
+  <div class="notice"><div class="ni">⚠️</div><div><strong>Lưu ý quan trọng</strong>
+    <p>Vui lòng có mặt trước giờ khám 15 phút để làm thủ tục. Nếu quá giờ, số thứ tự của bạn có thể bị hủy.</p></div></div>`;
+
+function roomChip(){
+  const m={[ROOM.PAUSED]:['⏸️','Tạm dừng','#8A5A00'],[ROOM.SERVING]:['▶️','Đang khám','#0B7A6C'],[ROOM.CLOSED]:['🔒','Đóng cửa','#475569']}[S.room.status];
+  return `<span class="chip" style="color:${m[2]};background:${m[2]}1F;border-color:${m[2]}4D;font-size:11px">${m[0]} ${m[1]}</span>`;
+}
+
+/* ---------- Render chính ---------- */
+function stateView(icon,color,title,text,extra=''){
+  return `<div class="state"><div class="big" style="background:${color}1F">${icon}</div>
+    <h3>${esc(title)}</h3><p>${esc(text)}</p>${extra}</div>`;
+}
+function render(){
+  if(!appointmentId){
+    app.innerHTML=stateView('📭','#D64545','Thiếu mã lịch hẹn','Vui lòng mở lại đường link có dạng ?id=<mã lịch hẹn>.'); return;
+  }
+  if(S.loading){ app.innerHTML=`<div class="state"><div class="spinner"></div>Đang tải lịch khám...</div>`; return; }
+  const idx = S.indexUrl?`<a class="index-link" target="_blank" rel="noopener" href="${esc(S.indexUrl)}">👉 Bấm vào đây để tạo Index trên Firebase Console</a>`:'';
+  if(S.error){
+    app.innerHTML=stateView('☁️','#D64545','Không tải được lịch khám',S.error,idx+`<button class="btn" onclick="location.reload()">Thử lại</button>`); return;
+  }
+  if(S.notFound||!S.appt){
+    app.innerHTML=stateView('📭','#D64545','Không tìm thấy lịch hẹn','Vui lòng kiểm tra lại đường link hoặc mã lịch hẹn.'); return;
+  }
+
+  const a=S.appt, x=S.extra, now=new Date();
+  const statusKey=statusOf(a.status), st=STATUS[statusKey];
+  const isTracking = statusKey==='approved'||statusKey==='late';
+  const closed = isTracking && S.room.status===ROOM.CLOSED;
+  const paused = isTracking && S.room.status===ROOM.PAUSED;
+
+  const gioBD=a.gioBD||x.gioBD||null, gioKT=a.gioKT||x.gioKT||null;
+  const hasTime=!!gioBD&&!!gioKT;
+  const timeLabel=hasTime?`${gioBD} - ${gioKT}`:'Chưa có giờ khám';
+  const dateLabel=a.ngayDat?fmtDate(a.ngayDat):'--/--/----';
+
+  let h='';
+  if(a.tenNguoiKham){
+    h+=`<div class="person">🧑 Đang theo dõi cho: ${a.quanHe?esc(a.quanHe)+' - ':''}${esc(a.tenNguoiKham)}</div>`;
+  }
+  h+=`<div class="card">
+    <div class="h-head">
+      <div class="h-icon">🏥</div>
+      <div class="h-info"><small>Bệnh viện</small><h2>${esc(a.tenBenhVien||x.tenBenhVien||'Bệnh viện')}</h2></div>
+      <span class="chip" style="color:${st.fg};background:${st.bg};border-color:${st.bd}">${st.icon} ${st.label}</span>
+    </div>
+    <div class="room"><div class="room-icon">🚪</div>
+      <div class="room-info"><div class="lb">PHÒNG KHÁM</div>
+        <div class="nm">${esc(a.tenPhong||x.tenPhong||'Phòng khám chưa cập nhật')}</div>
+        <div class="dp">🩺 ${esc(a.tenKhoa||x.tenKhoa||'Khoa chưa cập nhật')}</div></div>
+      ${isTracking&&S.roomLoaded?roomChip():''}
+    </div>
+    <div class="dt-row">
+      <div class="dt"><div class="dt-i">📅</div><div style="min-width:0"><span>Ngày khám</span><strong>${dateLabel}</strong></div></div>
+      <div class="dt"><div class="dt-i">⏰</div><div style="min-width:0"><span>Giờ khám</span><strong>${esc(timeLabel)}</strong></div></div>
+    </div></div>`;
+
+  const showPrep = (statusKey==='pending'||statusKey==='approved'||statusKey==='late') && !closed;
+
+  switch(statusKey){
+    case 'pending':
+      h+=msgCard('⏳','#0B5CAD','Lịch hẹn đang chờ duyệt','Bệnh viện sẽ xem xét và xác nhận lịch hẹn của bạn. Bạn sẽ nhận được thông báo khi lịch được duyệt.'); break;
+    case 'cancelled':
+      h+=msgCard('❌','#D64545','Lịch hẹn đã bị hủy','Bạn có thể đặt lại lịch khám mới bất cứ lúc nào.'); break;
+    case 'completed':
+      h+=`<div class="card msg"><div class="ic done-ic" style="font-size:36px">✓</div>
+        <h4 style="color:var(--teal)">Bạn đã hoàn thành lượt khám</h4>
+        <p>Cảm ơn bạn đã sử dụng dịch vụ. Chúc bạn nhiều sức khỏe!</p></div>`; break;
+    case 'missed':
+      h+=msgCard('🚫','#6B7C89','Bạn đã vắng mặt','Lịch khám này được ghi nhận là vắng mặt. Bạn có thể đặt lại lịch khám khi cần.'); break;
+
+    case 'late':
+      if(closed){ h+=closedCard(); break; }
+      if(paused) h+=pausedCard(roomPausedNow(now));
+      h+=lock(paused,nowServingCard(S.queue.length?S.queue[0].so:0));
+      h+=lateTicketCard(a.soThuTu)+`<div style="height:16px"></div>`+lateSteps()+`<div style="height:16px"></div>`+lateEstimate();
+      break;
+
+    case 'approved': {
+      if(closed){ h+=closedCard(); break; }
+      if(paused) h+=pausedCard(roomPausedNow(now));
+      const current=S.queue.length?S.queue[0].so:0;
+      const myIndex=S.queue.findIndex(b=>b.id===a.id);
+      const myNumber=myIndex!==-1?S.queue[myIndex].so:(a.soThuTu>0?a.soThuTu:0);
+      if(myNumber<=0){ h+=noTicketCard(timeLabel); break; }
+      h+=lock(paused,nowServingCard(current));
+      if(S.queueError){ h+=queueStatusCard(false,S.queueError); break; }
+      if(!S.queueLoaded){ h+=queueStatusCard(true,`Số của bạn: ${myNumber}. Đang đồng bộ hàng chờ...`); break; }
+      if(myIndex===-1){
+        h+=msgCard('ℹ️','#0B5CAD','Chưa thấy số của bạn trong hàng chờ','Tải lại trang để làm mới. Nếu vẫn chưa thấy, vui lòng liên hệ nhân viên hỗ trợ tại phòng khám.'); break;
+      }
+      const ahead=myIndex;
+      const wait=ahead*perPatientMinutes();
+      const pauseMin=roomPauseTotal(now);
+      const e=a.ngayDat?estimateTurn(a.ngayDat,gioBD,gioKT,wait,pauseMin):{eta:now,exceeds:false,shiftNotStarted:false};
+      h+=lock(paused,myTurnCard(myNumber,ahead,wait)+queueTrack(current,myNumber));
+      h+=`<div style="height:16px"></div>`+estimateCard(e,wait,pauseMin,gioBD);
+      break;
+    }
+  }
+  if(showPrep) h+=prepareCard();
+  app.innerHTML=h;
+}
+
+/* ---------- Khởi động ---------- */
+render();
+if(appointmentId){
+  startAppt();
+  setInterval(render,60000); // làm mới giờ dự kiến mỗi phút
+  window.addEventListener('pagehide',()=>{unsubAppt&&unsubAppt();stopListeners();});
+}
+</script>
+</body>
+</html>

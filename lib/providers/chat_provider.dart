@@ -5,6 +5,7 @@ class ChatProvider extends ChangeNotifier {
 
   List<String> get messages => _messages;
 
+  /// addMessage: thêm dữ liệu vào danh sách hoặc state.
   void addMessage(String message) {
     _messages.add(message);
     notifyListeners();

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../models/letan_c1/letan_design_system_c1.dart';
 import '../../../models/letan_c1/letan_profile_model_c1.dart';
 import '../../../services/letan_c1/letan_firebase_service_c1.dart';
-import '../cskh_danhsach_don_khoa_screen_c1.dart';
 import 'cskh_department_selector_card_c1.dart';
 
 /// Tab duyệt đơn theo phòng khám của khoa đang chọn
@@ -11,8 +10,8 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
   final String tenKhoaHienTai;
   final String? khoaIdHienTai;
   final DateTime ngayChon;
-  final VoidCallback onSelectKhoa;
   final VoidCallback onSelectDate;
+  final VoidCallback? onOpenLichSu;
   final void Function(Map<String, dynamic> phong, String tenKhoa) onSelectPhong;
 
   const CskhTabDuyetPhongC1({
@@ -20,9 +19,9 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
     required this.tenKhoaHienTai,
     required this.khoaIdHienTai,
     required this.ngayChon,
-    required this.onSelectKhoa,
     required this.onSelectDate,
     required this.onSelectPhong,
+    this.onOpenLichSu,
   });
 
   @override
@@ -38,52 +37,94 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
           // 1. Selector chọn Khoa làm việc ở trên cùng
           CskhDepartmentSelectorCardC1(
             tenKhoaHienTai: tenKhoaHienTai,
-            onChangeDepartment: onSelectKhoa,
-            label: 'KHOA ĐANG CHỌN',
-            badgeText: 'Đang làm việc',
           ),
           const SizedBox(height: 14),
 
-          // 2. Thanh chọn Ngày duyệt đơn
+          // 2. Thanh chọn Ngày duyệt đơn & Lịch sử (Dùng Flexible + FittedBox chống tràn pixel)
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'NGÀY DUYỆT ĐƠN',
-                style: TextStyle(
-                  color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF475569),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
+              Expanded(
+                child: Text(
+                  'NGÀY DUYỆT ĐƠN',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF475569),
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
-              InkWell(
-                onTap: onSelectDate,
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0C2444) : const Color(0xFFE0F2FE),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: const Color(0xFF0284C7).withValues(alpha: 0.3),
-                    ),
-                  ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.calendar_today_rounded, size: 14, color: Color(0xFF0284C7)),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${ngayChon.day.toString().padLeft(2, '0')}/${ngayChon.month.toString().padLeft(2, '0')}/${ngayChon.year}',
-                        style: const TextStyle(
-                          color: Color(0xFF0284C7),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                      if (onOpenLichSu != null) ...[
+                        InkWell(
+                          onTap: onOpenLichSu,
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: isDark ? const Color(0xFF451A03) : const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: isDark ? 0.6 : 0.4)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.history_rounded, size: 13, color: Color(0xFFD97706)),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Lịch sử',
+                                  style: TextStyle(
+                                    color: Color(0xFFB45309),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
+                      InkWell(
+                        onTap: onSelectDate,
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isDark ? const Color(0xFF0C2444) : const Color(0xFFE0F2FE),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: const Color(0xFF0284C7).withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.calendar_today_rounded, size: 13, color: Color(0xFF0284C7)),
+                              const SizedBox(width: 5),
+                              Text(
+                                '${ngayChon.day.toString().padLeft(2, '0')}/${ngayChon.month.toString().padLeft(2, '0')}/${ngayChon.year}',
+                                style: const TextStyle(
+                                  color: Color(0xFF0284C7),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              const Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF0284C7)),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF0284C7)),
                     ],
                   ),
                 ),
@@ -92,7 +133,7 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // 3. Tiêu đề danh sách phòng khám & Nút vào duyệt toàn viện
+          // 3. Tiêu đề danh sách phòng khám (Đã bỏ nút Duyệt toàn bộ khoa theo yêu cầu)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -103,37 +144,6 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
-                ),
-              ),
-              InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CskhDanhsachDonKhoaScreenC1(
-                        tenKhoa: tenKhoaHienTai,
-                        phongKham: 'Toàn khoa',
-                        caKham: 'Tất cả các ca',
-                        tongDon: 0,
-                      ),
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0C2444) : const Color(0xFFE0F2FE),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Duyệt toàn bộ khoa',
-                    style: TextStyle(
-                      color: Color(0xFF0284C7),
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
                 ),
               ),
             ],
@@ -151,6 +161,45 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
                   khoaDoc = k;
                   break;
                 }
+              }
+
+              // Nếu Bệnh viện đã xóa Khoa này: Chặn hoàn toàn không hiển thị phòng khám ảo
+              if (dsKhoa.isNotEmpty && khoaDoc == null) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF450A0A).withValues(alpha: 0.4) : const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFEF4444).withValues(alpha: isDark ? 0.6 : 0.4),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.lock_rounded, size: 36, color: Color(0xFFEF4444)),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Khoa "$tenKhoaHienTai" đã bị xóa khỏi hệ thống',
+                        style: const TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Bạn không có quyền quản lý hay duyệt đơn của các phòng thuộc khoa khác.',
+                        style: TextStyle(
+                          color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                );
               }
 
               final khoaId = khoaIdHienTai ?? khoaDoc?['id']?.toString() ?? 'KHOA_MAC_DINH';
@@ -264,12 +313,16 @@ class CskhTabDuyetPhongC1 extends StatelessWidget {
                                   children: [
                                     Row(
                                       children: [
-                                        Text(
-                                          tenPhong,
-                                          style: TextStyle(
-                                            color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF0F172A),
-                                            fontSize: 15.5,
-                                            fontWeight: FontWeight.w700,
+                                        Flexible(
+                                          child: Text(
+                                            tenPhong,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF0F172A),
+                                              fontSize: 15.5,
+                                              fontWeight: FontWeight.w700,
+                                            ),
                                           ),
                                         ),
                                         if (soPhong.isNotEmpty) ...[

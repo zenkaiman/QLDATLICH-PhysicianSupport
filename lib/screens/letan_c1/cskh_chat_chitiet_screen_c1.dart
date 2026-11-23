@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../mock/mock_c1/dulieu_mau_cskh_c1.dart';
+import '../../models/letan_c1/cskh_constants_c1.dart';
 import '../../models/letan_c1/cskh_model_c1.dart';
 import '../../models/letan_c1/letan_design_system_c1.dart';
 import '../../models/letan_c1/letan_profile_model_c1.dart';
@@ -25,9 +25,30 @@ class _CskhChatChitietScreenC1State extends State<CskhChatChitietScreenC1> {
   final TextEditingController _noiDungController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  @override
+  void initState() {
+    super.initState();
+    // Đánh dấu đã đọc ngay khi mở cuộc trò chuyện
+    FirebaseServiceC1.danhDauDaDocCskh(widget.hoiThoai.id);
+  }
+
   void _guiTinNhan([String? noiDungGui]) async {
     final text = noiDungGui ?? _noiDungController.text.trim();
     if (text.isEmpty) return;
+
+    // Kiểm tra phân công ca trực (trang_thai_id == 16)
+    final caTruc = await FirebaseServiceC1.kiemTraPhanCongCaTruc();
+    if (!mounted) return;
+    if (!caTruc.duocPhanCong) {
+      AppDesignSystemC1.hapticError();
+      AppDesignSystemC1.showCustomSnackBar(
+        context,
+        message: '✕ Thao tác bị khóa: Bạn chưa được Bệnh viện phân công ca trực!',
+        isSuccess: false,
+        icon: Icons.lock_clock_rounded,
+      );
+      return;
+    }
 
     AppDesignSystemC1.hapticLight();
     if (noiDungGui == null) {
@@ -73,20 +94,51 @@ class _CskhChatChitietScreenC1State extends State<CskhChatChitietScreenC1> {
                       hoiThoaiId: widget.hoiThoai.id,
                     ),
                     builder: (context, snapshot) {
-                      List<TinNhanCskhModelC1> danhSachTin;
+                      if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF0284C7),
+                          ),
+                        );
+                      }
 
-                      if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                        danhSachTin = snapshot.data!.map((m) {
-                          return TinNhanCskhModelC1(
-                            id: m['id'] ?? '',
-                            hoiThoaiId: widget.hoiThoai.id,
-                            noiDung: (m['noi_dung'] ?? '').toString(),
-                            thoiGian: (m['gio_hien_thi'] ?? 'Vừa xong').toString(),
-                            laCskhGui: m['la_cskh_gui'] == true,
-                          );
-                        }).toList();
-                      } else {
-                        danhSachTin = DuLieuCskhKhoaC1.layTinNhanTheoHoiThoai(widget.hoiThoai.id);
+                      final danhSachTin = (snapshot.data ?? []).map((m) {
+                        return TinNhanCskhModelC1.fromMap(m, m['id']);
+                      }).toList();
+
+                      if (danhSachTin.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 48,
+                                  color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF94A3B8),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Chưa có tin nhắn nào',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF475569),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Hãy gửi tin nhắn đầu tiên để hỗ trợ bệnh nhân',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
                       }
 
                       return ListView.builder(
@@ -166,6 +218,8 @@ class _CskhChatChitietScreenC1State extends State<CskhChatChitietScreenC1> {
               children: [
                 Text(
                   widget.hoiThoai.hoTen,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: isDark ? AppDesignSystemC1.darkTextPrimary : const Color(0xFF1C1C1E),
                     fontSize: 16,
@@ -174,6 +228,8 @@ class _CskhChatChitietScreenC1State extends State<CskhChatChitietScreenC1> {
                 ),
                 Text(
                   '${widget.hoiThoai.tuoi} tuổi • ${widget.hoiThoai.khoa}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF8E8E93),
                     fontSize: 12,
@@ -235,6 +291,8 @@ class _CskhChatChitietScreenC1State extends State<CskhChatChitietScreenC1> {
           const SizedBox(height: 3),
           Text(
             'BHYT: ${widget.hoiThoai.maBhyt} • Lịch khám gần nhất: 18/09',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF334155),
               fontSize: 11.5,

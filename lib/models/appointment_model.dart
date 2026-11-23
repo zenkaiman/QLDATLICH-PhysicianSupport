@@ -25,7 +25,8 @@ class AppointmentModel {
       patientId: json['patientId'] ?? '',
       doctorId: json['doctorId'] ?? '',
       hospitalId: json['hospitalId'] ?? '',
-      appointmentDate: DateTime.tryParse(json['appointmentDate'] ?? '') ?? DateTime.now(),
+      appointmentDate:
+          DateTime.tryParse(json['appointmentDate'] ?? '') ?? DateTime.now(),
       status: json['status'] ?? 'pending',
       notes: json['notes'],
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../models/letan_c1/letan_design_system_c1.dart';
 import '../../../models/letan_c1/letan_qr_model_c1.dart';
-import '../letan_ketqua_qr_screen_c1.dart';
+import 'letan_qr_quick_view_bottom_sheet_c1.dart';
 
 /// Thẻ hiển thị bệnh nhân trong danh sách chờ khám của Lễ tân
 class LetanPatientCardC1 extends StatelessWidget {
@@ -52,35 +52,35 @@ class LetanPatientCardC1 extends StatelessWidget {
     return InkWell(
       onTap: () {
         AppDesignSystemC1.hapticLight();
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => LetanKetquaQrScreenC1(
-              ketQua: KetQuaQuetQrC1(
-                thanhCong: true,
-                thongBao: 'Hồ sơ tiếp nhận bệnh nhân',
-                chiTietLoi: 'Đã tiếp nhận vào hàng chờ',
-                soThuTu: int.tryParse(item['stt']?.toString() ?? '1') ?? 1,
-                gioKhamDuKien: '${item['gioKham']} - Hôm nay',
-                hoTen: hoTen.toUpperCase(),
-                maBenhNhan: (item['maBenhNhan'] ?? '').toString(),
-                namSinhGioiTinh: [
-                  item['namSinh']?.toString() ?? '',
-                  item['gioiTinh']?.toString() ?? ''
-                ].where((s) => s.isNotEmpty).join(' - '),
-                cccd: (item['cccd'] ?? '').toString(),
-                bhyt: (item['bhyt'] ?? '').toString(),
-                khoaKham: (item['tenKhoa'] ?? '').toString(),
-                phongKham: (item['phongKham'] ?? '').toString(),
-                bacSi: (item['bacSi'] ?? '').toString(),
-              ),
-            ),
+        LetanQrQuickViewBottomSheetC1.show(
+          context: context,
+          ketQua: KetQuaQuetQrC1(
+            thanhCong: true,
+            thongBao: 'Hồ sơ tiếp nhận bệnh nhân',
+            chiTietLoi: 'Đã tiếp nhận vào hàng chờ',
+            soThuTu: int.tryParse(item['stt']?.toString() ?? '1') ?? 1,
+            gioKhamDuKien: '${item['gioKham']} - Hôm nay',
+            hoTen: hoTen.toUpperCase(),
+            maBenhNhan: (item['maBenhNhan'] ?? '').toString(),
+            namSinhGioiTinh: [
+              item['namSinh']?.toString() ?? '',
+              item['gioiTinh']?.toString() ?? ''
+            ].where((s) => s.isNotEmpty).join(' - '),
+            cccd: (item['cccd'] ?? '').toString(),
+            bhyt: (item['bhyt'] ?? '').toString(),
+            khoaKham: (item['tenKhoa'] ?? '').toString(),
+            phongKham: (item['phongKham'] ?? '').toString(),
+            bacSi: (item['bacSi'] ?? '').toString(),
           ),
+          onQuetTiep: () {},
         );
       },
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: AppDesignSystemC1.scale(context, 12),
+          vertical: AppDesignSystemC1.scale(context, 10),
+        ),
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(12),
@@ -89,8 +89,8 @@ class LetanPatientCardC1 extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: AppDesignSystemC1.scale(context, 40),
+              height: AppDesignSystemC1.scale(context, 40),
               decoration: BoxDecoration(
                 color: avatarBg,
                 borderRadius: BorderRadius.circular(10),
@@ -100,47 +100,58 @@ class LetanPatientCardC1 extends StatelessWidget {
                 initials,
                 style: TextStyle(
                   color: avatarText,
-                  fontSize: 14,
+                  fontSize: AppDesignSystemC1.scale(context, 14),
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: AppDesignSystemC1.scale(context, 10)),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     hoTen,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: textCol,
-                      fontSize: 15,
+                      fontSize: AppDesignSystemC1.scale(context, 15),
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${item['gioKham']} • STT: ${item['stt']} • ${item['tenKhoa']}',
+                    (item['so_thu_tu'] != null && item['so_thu_tu'].toString().isNotEmpty)
+                        ? '${item['gioKham']} • STT: ${item['so_thu_tu']} • ${item['tenKhoa']}'
+                        : '${item['gioKham']} • ${item['tenKhoa']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: subTextCol,
-                      fontSize: 12,
+                      fontSize: AppDesignSystemC1.scale(context, 12),
                     ),
                   ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: badgeBg,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                trangThai,
-                style: TextStyle(
-                  color: badgeText,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+            const SizedBox(width: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  trangThai,
+                  style: TextStyle(
+                    color: badgeText,
+                    fontSize: AppDesignSystemC1.scale(context, 11.5),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),

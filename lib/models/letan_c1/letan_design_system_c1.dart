@@ -154,4 +154,16 @@ class AppDesignSystemC1 {
       transitionDuration: const Duration(milliseconds: 250),
     );
   }
+
+  // 8. TIỆN ÍCH CO GIÃN THU PHÓNG RESPONSIVE (CHỐNG LỖI TRÀN VIỀN CHO MỌI MÀN HÌNH ĐIỆN THOẠI)
+  static double scale(BuildContext context, double size) {
+    final w = MediaQuery.sizeOf(context).width;
+    // Chuẩn 375px (chuẩn mobile), giới hạn co giãn an toàn 0.85 (máy nhỏ) -> 1.15 (máy to)
+    final factor = (w / 375.0).clamp(0.85, 1.15);
+    return size * factor;
+  }
+
+  static double screenWidth(BuildContext context) => MediaQuery.sizeOf(context).width;
+  static double screenHeight(BuildContext context) => MediaQuery.sizeOf(context).height;
+  static bool isSmallScreen(BuildContext context) => MediaQuery.sizeOf(context).width < 360;
 }

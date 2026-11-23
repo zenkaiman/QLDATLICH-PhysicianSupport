@@ -11,6 +11,7 @@ class StorageService {
     return task.ref.getDownloadURL();
   }
 
+  /// deleteFile: xóa dữ liệu.
   Future<void> deleteFile(String path) async {
     await _storage.ref().child(path).delete();
   }

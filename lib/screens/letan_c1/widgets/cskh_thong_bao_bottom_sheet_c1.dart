@@ -10,6 +10,8 @@ class CskhThongBaoBottomSheetC1 {
     BuildContext context, {
     String vaiTro = 'cskh',
     String tieuDe = 'Thông Báo',
+    String? tenKhoaHienTai,
+    String? khoaIdHienTai,
   }) {
     AppDesignSystemC1.hapticLight();
     final isDark = AppDesignSystemC1.laCheDoToi;
@@ -23,7 +25,11 @@ class CskhThongBaoBottomSheetC1 {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return StreamBuilder<List<Map<String, dynamic>>>(
-              stream: FirebaseServiceC1.streamThongBaoRealtime(vaiTro: vaiTro),
+              stream: FirebaseServiceC1.streamThongBaoRealtime(
+                vaiTro: vaiTro,
+                tenKhoa: tenKhoaHienTai,
+                khoaId: khoaIdHienTai,
+              ),
               builder: (context, snapshot) {
                 final dsThongBaoRaw = snapshot.data ?? [];
                 final soLuongChuaDoc = dsThongBaoRaw.where((e) => e['da_doc'] != true).length;
@@ -81,7 +87,9 @@ class CskhThongBaoBottomSheetC1 {
                                       ),
                                     ),
                                     Text(
-                                      '$soLuongChuaDoc thông báo chưa đọc',
+                                      tenKhoaHienTai != null && tenKhoaHienTai.isNotEmpty
+                                          ? '$tenKhoaHienTai • $soLuongChuaDoc chưa đọc'
+                                          : '$soLuongChuaDoc thông báo chưa đọc',
                                       style: TextStyle(
                                         color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
                                         fontSize: 12,
@@ -91,13 +99,18 @@ class CskhThongBaoBottomSheetC1 {
                                 ),
                               ],
                             ),
-                            IconButton(
-                                icon: Icon(
-                                  Icons.close,
-                                  color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.close,
+                                    color: isDark ? AppDesignSystemC1.darkTextSecondary : const Color(0xFF64748B),
+                                  ),
+                                  onPressed: () => Navigator.pop(modalCtx),
                                 ),
-                                onPressed: () => Navigator.pop(modalCtx),
-                              ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
